@@ -1,0 +1,25 @@
+<?php
+
+return [
+    'management' => 'Attribute Management',
+    'management_description' => 'Manage product attributes and their values',
+    'create_attribute' => 'Create Attribute',
+    'edit_attribute' => 'Edit Attribute',
+    'create_new_attribute' => 'Create New Attribute',
+    'attribute_name' => 'Attribute Name',
+    'attribute_code' => 'Attribute Code',
+    'attribute_values' => 'Attribute Values',
+    'add_value' => 'Add Value',
+    'update_attribute' => 'Update Attribute',
+    'saving' => 'Saving...',
+    'name_placeholder' => 'e.g., Color, Size, Model',
+    'code_placeholder' => 'e.g., color, size, model',
+    'value_placeholder' => 'Value (e.g., Small, Red)',
+    'value' => 'Value',
+    'code' => 'Code',
+    'add' => 'Add',
+    'no_attributes_found' => 'No attributes found',
+    'get_started' => 'Get started by creating your first attribute',
+    'confirm_delete_attribute' => 'Are you sure you want to delete ":name"?',
+    'confirm_delete_value' => 'Are you sure you want to delete this value?',
+];

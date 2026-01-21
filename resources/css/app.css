@@ -1,0 +1,145 @@
+@import url("https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap");
+@import "tailwindcss";
+
+@source "../**/*.blade.php";
+@source "../**/*.js";
+@source "../**/*.jsx";
+@source "../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php";
+@source "../../storage/framework/views/*.php";
+
+@plugin "daisyui" {
+    themes: light --default;
+}
+
+@plugin "daisyui/theme" {
+    name: "light";
+    default: true;
+    prefersdark: false;
+    color-scheme: "light";
+    --color-base-100: oklch(100% 0 0);
+    --color-base-200: oklch(98% 0 0);
+    --color-base-300: oklch(95% 0 0);
+    --color-base-content: oklch(21% 0.006 285.885);
+    --color-primary: oklch(0.6682 0.150792 160.1506);
+    --color-primary-content: oklch(93% 0.034 272.788);
+    --color-secondary: oklch(65% 0.241 354.308);
+    --color-secondary-content: oklch(94% 0.028 342.258);
+    --color-accent: oklch(77% 0.152 181.912);
+    --color-accent-content: oklch(38% 0.063 188.416);
+    --color-neutral: oklch(14% 0.005 285.823);
+    --color-neutral-content: oklch(92% 0.004 286.32);
+    --color-info: oklch(74% 0.16 232.661);
+    --color-info-content: oklch(29% 0.066 243.157);
+    --color-success: oklch(76% 0.177 163.223);
+    --color-success-content: oklch(37% 0.077 168.94);
+    --color-warning: oklch(82% 0.189 84.429);
+    --color-warning-content: oklch(41% 0.112 45.904);
+    --color-error: oklch(71% 0.194 13.428);
+    --color-error-content: oklch(27% 0.105 12.094);
+    --radius-selector: 0rem;
+    --radius-field: 0rem;
+    --radius-box: 0rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 1;
+    --noise: 0;
+}
+
+:root {
+    --toastify-toast-bd-radius: var(--radius-box);
+    --toastify-color-success: var(--color-primary);
+}
+
+@layer utilities {
+    .input,
+    .select,
+    .textarea {
+        @apply outline-0 focus:outline-0 focus:border-primary duration-300 w-full;
+    }
+}
+
+@theme {
+    --font-base: "Roboto", sans-serif;
+}
+
+@layer base {
+    body {
+        @apply font-base;
+    }
+}
+
+.css-13cymwt-control {
+    box-shadow: none !important;
+    border-color: color-mix(
+        in oklab,
+        var(--color-base-content) 20%,
+        #0000
+    ) !important;
+    border-radius: var(--radius-box) !important;
+}
+.css-13cymwt-control:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* thermerl prinater */
+@media print {
+    @page {
+        size: 80mm auto;
+        margin: 0;
+    }
+    body {
+        margin: 0;
+    }
+}
+
+
+@keyframes draw {
+    to { stroke-dashoffset: 0; }
+}
+
+.leaf-card-top {
+    border-radius: 20px;
+    box-shadow: 0 4px 20px rgba(30, 77, 43, 0.1);
+    transition: transform 0.2s ease;
+}
+
+.leaf-card-top:hover {
+    transform: translateY(-4px);
+}
+
+.glass-icon {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.chart-path-sales {
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    animation: draw 2s forwards ease-out;
+}
+
+/* Custom scrollbar */
+.sidebar-scroll::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.05);
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}

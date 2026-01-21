@@ -1,0 +1,42 @@
+<?php
+
+return [
+
+'title' => 'আউটলেট ইতিহাস',
+'subtitle' => 'সব আউটলেটের লেনদেন দেখুন ও পরিচালনা করুন',
+'add_outlet' => 'আউটলেট যোগ করুন',
+'inactive_outlets' => 'নিষ্ক্রিয় আউটলেট',
+'active_outlets' => 'সক্রিয় আউটলেট',
+'total_outlets' => 'মোট আউটলেট',
+'no_outlets_found' => 'কোনো আউটলেট পাওয়া যায়নি',
+'add_first_outlet' => 'প্রথম আউটলেট যোগ করুন',
+'all_status' => 'সব স্ট্যাটাস',
+'search_placeholder' => 'নাম বা বিবরণ দিয়ে অনুসন্ধান করুন...',
+'search' => 'অনুসন্ধান',
+'new_outlet' => 'নতুন আউটলেট',
+'add_new_outlet' => 'নতুন আউটলেট যোগ করুন',
+'basic_information' => 'মৌলিক তথ্য',
+'contact_information' => 'যোগাযোগের তথ্য',
+'outlet_name' => 'আউটলেটের নাম',
+'outlet_name_placeholder' => 'আউটলেটের নাম লিখুন',
+'phone' => 'ফোন নম্বর',
+'phone_placeholder' => 'ফোন নম্বর লিখুন',
+'email' => 'ইমেইল',
+'email_placeholder' => 'ইমেইল ঠিকানা লিখুন',
+'address' => 'ঠিকানা',
+'address_placeholder' => 'ঠিকানা লিখুন',
+'is_active' => 'সক্রিয় আছে কি না',
+'status_settings' => 'স্ট্যাটাস সেটিংস',
+'status_field' => 'আউটলেটের অবস্থা',
+'create_outlet' => 'আউটলেট তৈরি করুন',
+'active' => 'সক্রিয়',
+'inactive' => 'নিষ্ক্রিয়',
+'inactive_outlet' => 'নিষ্ক্রিয় আউটলেট',
+'processing' => 'প্রক্রিয়াধীন',
+'outlet_info' => 'আউটলেটের তথ্য',
+'contact_details' => 'যোগাযোগের বিস্তারিত',
+'status' => 'অবস্থা',
+'command' =>  'কমান্ড',
+'clear' => 'পরিষ্কার'
+
+];

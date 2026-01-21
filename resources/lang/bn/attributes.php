@@ -1,0 +1,25 @@
+<?php
+
+return [
+    'management' => 'বৈশিষ্ট্য ব্যবস্থাপনা',
+    'management_description' => 'পণ্যের বৈশিষ্ট্য এবং তাদের মানগুলি পরিচালনা করুন',
+    'create_attribute' => 'বৈশিষ্ট্য তৈরি করুন',
+    'edit_attribute' => 'বৈশিষ্ট্য সম্পাদনা করুন',
+    'create_new_attribute' => 'নতুন বৈশিষ্ট্য তৈরি করুন',
+    'attribute_name' => 'বৈশিষ্ট্যের নাম',
+    'attribute_code' => 'বৈশিষ্ট্য কোড',
+    'attribute_values' => 'বৈশিষ্ট্যের মানসমূহ',
+    'add_value' => 'মান যোগ করুন',
+    'update_attribute' => 'বৈশিষ্ট্য আপডেট করুন',
+    'saving' => 'সংরক্ষণ করা হচ্ছে...',
+    'name_placeholder' => 'যেমন: রং, সাইজ, মডেল',
+    'code_placeholder' => 'যেমন: color, size, model',
+    'value_placeholder' => 'মান (যেমন: ছোট, লাল)',
+    'value' => 'মান',
+    'code' => 'কোড',
+    'add' => 'যোগ করুন',
+    'no_attributes_found' => 'কোন বৈশিষ্ট্য পাওয়া যায়নি',
+    'get_started' => 'আপনার প্রথম বৈশিষ্ট্য তৈরি করে শুরু করুন',
+    'confirm_delete_attribute' => 'আপনি কি নিশ্চিত যে আপনি ":name" ডিলিট করতে চান?',
+    'confirm_delete_value' => 'আপনি কি নিশ্চিত যে আপনি এই মানটি ডিলিট করতে চান?',
+];
