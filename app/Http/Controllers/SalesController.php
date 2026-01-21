@@ -186,6 +186,8 @@ class SalesController extends Controller
             ->orderBy('created_at', 'asc')
             ->get();
 
+        
+
         $accounts = Account::where('is_active', true)->get();
         $supplier = Supplier::get();
 

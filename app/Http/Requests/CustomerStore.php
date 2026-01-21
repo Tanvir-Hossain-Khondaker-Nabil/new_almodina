@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Http\Requests;
-
+use Illuminate\Validation\Rule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class CustomerStore extends FormRequest
@@ -22,13 +22,17 @@ class CustomerStore extends FormRequest
     public function rules(): array
     {
         return [
-            'customer_name' => 'required|string|max:255',
-            'phone' => 'required|string|max:20',
-            'address' => 'nullable|string',
+            'customer_name'  => 'required|string|max:255',
+            'phone'          => 'required|string|max:20',
+            'address'        => 'nullable|string',
             'advance_amount' => 'nullable|numeric|min:0',
-            'due_amount' => 'nullable|numeric|min:0',
-            'is_active' => 'boolean',
-            'account_id' => 'nullable|exists:accounts,id'
+            'due_amount'     => 'nullable|numeric|min:0',
+            'is_active'      => 'boolean',
+            'account_id' => [
+                'nullable',
+                'exists:accounts,id',
+                Rule::requiredIf(fn () => request('advance_amount') > 0),
+            ],
         ];
     }
 }

@@ -2,15 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\CustomerStore;
-use App\Models\Account;
-use App\Models\Customer;
-use App\Models\Payment;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Inertia\Inertia;
-use Illuminate\Support\Str;
 use Carbon\Carbon;
+use App\Models\Sale;
+use Inertia\Inertia;
+use App\Models\Account;
+use App\Models\Payment;
+use App\Models\Customer;
+use Illuminate\Support\Str;
+use Illuminate\Http\Request;
+use App\Http\Requests\CustomerStore;
+use Illuminate\Support\Facades\Auth;
 
 class CustomerController extends Controller
 {
@@ -54,9 +55,13 @@ class CustomerController extends Controller
     // store
     public function store(CustomerStore $request)
     {
-
         $request->validated();
-        $account = Account::find($request->input('account_id'));
+
+        $account = null;
+        if($request->account_id !=null) 
+        {
+            $account = Account::find($request->input('account_id'));
+        }
         
         try {
            $customer =   Customer::create([
@@ -68,6 +73,20 @@ class CustomerController extends Controller
                 'is_active' => $request->is_active ?? true,
                 'created_by' => Auth::id(),
             ]);
+
+            if($request->due_amount > 0)
+            {
+                Sale::create([
+                    'customer_id' => $customer->id,
+                    'invoice_no' => 'ICD-' . Str::random(8),
+                    'grand_total' => $request->due_amount,
+                    'paid_amount' => 0,
+                    'due_amount' => $request->due_amount ?? 0,
+                    'status' => 'pending',
+                    'outlet_id' => Auth::user()->current_outlet_id ?? 1,
+                    'created_by' => Auth::id(),
+                ]);
+            }
 
             if ($account) {
                 if ($request->advance_amount && $request->advance_amount > 0) {
