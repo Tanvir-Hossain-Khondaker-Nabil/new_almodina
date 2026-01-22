@@ -91,7 +91,7 @@ export default function PurchaseReturnList({
     // Get type badge
     const getTypeBadge = (type) => {
         if (type === 'money_back') {
-            return <span className="badge badge-primary badge-sm">
+            return <span className="badge badge-primary  h-10 badge-sm">
                 {t('purchase_return.money_back', 'Money Back')}
             </span>;
         } else if (type === 'product_replacement') {
@@ -314,13 +314,13 @@ export default function PurchaseReturnList({
                     </button>
 
                     {/* View Button */}
-                    <button
+                    {/* <button
                         onClick={() => router.visit(route('purchase-return.show', row.id))}
                         className="btn btn-xs btn-outline btn-info"
                         title="View Details"
                     >
                         <Eye size={12} />
-                    </button>
+                    </button> */}
 
                     {/* Approve Button - Always visible for pending returns */}
                     {row.status === 'pending' && (
@@ -347,35 +347,6 @@ export default function PurchaseReturnList({
                             )}
                         </button>
                     )}
-
-                    {/* Delete Button - Always visible for pending returns */}
-                    {row.status === 'pending' && (
-                        <button
-                            onClick={() => handleDelete(row)}
-                            className="btn btn-xs btn-outline btn-error"
-                            title="Delete Return"
-                        >
-                            <Trash2 size={12} />
-                        </button>
-                    )}
-
-                    <div className="dropdown dropdown-left">
-                        <label tabIndex={0} className="btn btn-xs btn-ghost">
-                            <MoreVertical size={14} />
-                        </label>
-                        <ul tabIndex={0} className="dropdown-content menu menu-xs p-2 shadow bg-base-100 rounded-box w-40">
-                            <li>
-                                <a onClick={() => window.print()}>
-                                    <Printer size={12} /> {t('purchase_return.print', 'Print')}
-                                </a>
-                            </li>
-                            <li>
-                                <a onClick={() => {/* Export functionality */ }}>
-                                    <Download size={12} /> {t('purchase_return.export', 'Export')}
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
                 </div>
             )
         }
@@ -415,18 +386,7 @@ export default function PurchaseReturnList({
                                 <span className="text-gray-600">{t('purchase_return.refunded', 'Refunded')}:</span>
                                 <span className="text-success">৳{formatCurrency(row.refunded_amount)}</span>
                             </div>
-                            {!isShadowUser && (
-                                <>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-600">{t('purchase_return.shadow_return', 'Shadow Return')}:</span>
-                                        <span className="text-warning">৳{formatCurrency(row.shadow_return_amount)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-600">{t('purchase_return.shadow_refunded', 'Shadow Refunded')}:</span>
-                                        <span className="text-warning">৳{formatCurrency(row.shadow_refunded_amount)}</span>
-                                    </div>
-                                </>
-                            )}
+
                         </div>
                     </div>
 
@@ -442,15 +402,14 @@ export default function PurchaseReturnList({
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-base-300 flex gap-2">
-                    <button
+                    {/* <button
                         onClick={() => router.visit(route('purchase-return.show', row.id))}
                         className="btn btn-sm btn-outline btn-info"
                     >
                         <Eye size={14} className="mr-1" />
                         {t('purchase_return.view_full_details', 'View Full Details')}
-                    </button>
+                    </button> */}
 
-                    {/* Approve button in expanded view */}
                     {row.status === 'pending' && (
                         <button
                             onClick={() => handleApprove(row.id)}
@@ -461,7 +420,6 @@ export default function PurchaseReturnList({
                         </button>
                     )}
 
-                    {/* Complete button in expanded view - for BOTH return types */}
                     {row.status === 'approved' && (
                         <button
                             onClick={() => handleComplete(row.id)}
@@ -481,8 +439,7 @@ export default function PurchaseReturnList({
                         </button>
                     )}
 
-                    {/* Delete button in expanded view */}
-                    {row.status === 'pending' && (
+                    {/* {row.status === 'pending' && (
                         <button
                             onClick={() => handleDelete(row)}
                             className="btn btn-sm btn-outline btn-error"
@@ -490,7 +447,7 @@ export default function PurchaseReturnList({
                             <Trash2 size={14} className="mr-1" />
                             {t('purchase_return.delete', 'Delete')}
                         </button>
-                    )}
+                    )} */}
                 </div>
             </div>
         );

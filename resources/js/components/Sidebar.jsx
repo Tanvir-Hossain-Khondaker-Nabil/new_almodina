@@ -82,7 +82,7 @@ const baseMenu = [
   { title: "Accounts", icon: "dollar-sign", route: "accounts.index", routeParams: null, active: "accounts.index", role: "all", category: "Finance" },
   { title: "Ledgers", icon: "box", route: "ledgers.index", routeParams: null, active: "ledgers.index", role: "all", category: "Finance" },
 
-  { title: "Dealerships", icon: "box", route: "dealerships.index", routeParams: null, active: "dealerships.index", role: "all", category: "Partners" },
+  // { title: "Dealerships", icon: "box", route: "dealerships.index", routeParams: null, active: "dealerships.index", role: "all", category: "Partners" },
 
   { title: "Customer", icon: "user-plus", route: "customer.index", routeParams: null, active: "customer.index", role: "all", category: "CRM" },
   { title: "Companies", icon: "user-plus", route: "companies.index", routeParams: null, active: "companies.index", role: "all", category: "CRM" },
@@ -95,7 +95,7 @@ const baseMenu = [
   { title: "Bonus", icon: "gift", route: "bonus.index", routeParams: null, active: "bonus.index", role: "all", category: "HR" },
   { title: "SMS", icon: "gift", route: "sms-templates.index", routeParams: null, active: "sms-templates.index", role: "all", category: "HR" },
 
-  { title: "Outlet", icon: "store", route: "outlets.index", routeParams: null, active: "outlets.index", role: "all", category: "Outlets" },
+  // { title: "Outlet", icon: "store", route: "outlets.index", routeParams: null, active: "outlets.index", role: "all", category: "Outlets" },
 ];
 
 const iconComponents = {

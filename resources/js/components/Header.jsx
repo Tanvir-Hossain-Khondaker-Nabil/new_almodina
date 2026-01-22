@@ -223,7 +223,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
         </button>
 
         {/* Outlet pill */}
-        {currentOutlet && isLoggedIntoOutlet ? (
+        {/* {currentOutlet && isLoggedIntoOutlet ? (
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-[#1e4d2b]/10 rounded-lg">
               <Store size={16} className="text-[#1e4d2b]" />
@@ -231,7 +231,6 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
               <span className="text-xs text-gray-500">• {currentOutlet.code}</span>
             </div>
 
-            {/* Mobile: outlet mini */}
             <div className="sm:hidden flex items-center gap-2 px-2.5 py-1.5 bg-[#1e4d2b]/10 rounded-lg">
               <Store size={16} className="text-[#1e4d2b]" />
               <span className="text-xs font-bold text-[#1e4d2b] max-w-[120px] truncate">
@@ -239,7 +238,6 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
               </span>
             </div>
 
-            {/* Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowOutletDropdown((s) => !s)}
@@ -313,7 +311,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
           </div>
         ) : (
           <div className="text-sm text-gray-500 hidden sm:block">No outlet selected</div>
-        )}
+        )} */}
 
         {/* Language */}
         <div className="flex items-center">
@@ -477,7 +475,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
               </Link>
             </li>
 
-            <li className="mt-1">
+            {/* <li className="mt-1">
               <button
                 onClick={handleToggleUserType}
                 className={`btn btn-sm ${isShadowUser ? "bg-[#1e4d2b] text-white" : "bg-amber-500 text-white"} gap-2`}
@@ -486,7 +484,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }) {
                 <Shield size={16} />
                 {isShadowUser ? "General Mode" : "Shadow Mode"}
               </button>
-            </li>
+            </li> */}
           </ul>
         </div>
       </div>
