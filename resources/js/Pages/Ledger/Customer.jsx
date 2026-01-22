@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Head, Link, router, useForm, usePage } from "@inertiajs/react";
-import { 
+import {
   Search,
   Filter,
   Download,
@@ -72,11 +72,11 @@ ChartJS.register(
   Filler
 );
 
-export default function CustomerLedger({ 
-  customer = null, 
-  sales = [], 
-  stats = {}, 
-  chart_data = {}, 
+export default function CustomerLedger({
+  customer = null,
+  sales = [],
+  stats = {},
+  chart_data = {},
   filters = {},
   accounts = []
 }) {
@@ -88,7 +88,7 @@ export default function CustomerLedger({
   const [monthlyChartData, setMonthlyChartData] = useState(null);
   const [paymentChartData, setPaymentChartData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Due Clearance States
   const [showDueClearance, setShowDueClearance] = useState(false);
   const [dueAmount, setDueAmount] = useState(0);
@@ -99,7 +99,7 @@ export default function CustomerLedger({
     notes: "",
     account_id: "",
     date: new Date().toISOString().split('T')[0],
-    type : 'customer'
+    type: 'customer'
   });
   const [selectedSales, setSelectedSales] = useState([]);
   const [isPartialPayment, setIsPartialPayment] = useState(false);
@@ -123,7 +123,7 @@ export default function CustomerLedger({
       }, 0);
       setDueAmount(totalDue);
       setAdvanceAmount(customer?.advance_amount || 0);
-      
+
       // Initialize payment form with total due
       setPaymentForm(prev => ({
         ...prev,
@@ -141,7 +141,7 @@ export default function CustomerLedger({
     if (chart_data.monthly_sales) {
       const monthlyLabels = Object.keys(chart_data.monthly_sales);
       const monthlyValues = Object.values(chart_data.monthly_sales);
-      
+
       setMonthlyChartData({
         labels: monthlyLabels,
         datasets: [
@@ -162,7 +162,7 @@ export default function CustomerLedger({
     if (chart_data.payment_methods) {
       const paymentLabels = Object.keys(chart_data.payment_methods);
       const paymentValues = Object.values(chart_data.payment_methods);
-      
+
       // Generate colors based on number of payment methods
       const backgroundColors = [
         'rgba(34, 197, 94, 0.8)',
@@ -172,7 +172,7 @@ export default function CustomerLedger({
         'rgba(239, 68, 68, 0.8)',
         'rgba(234, 179, 8, 0.8)',
       ];
-      
+
       setPaymentChartData({
         labels: paymentLabels,
         datasets: [
@@ -197,17 +197,17 @@ export default function CustomerLedger({
 
   const handleFilter = () => {
     if (!customer) return;
-    
+
     const queryParams = {};
-    
+
     if (filterForm.data.search.trim()) {
       queryParams.search = filterForm.data.search.trim();
     }
-    
+
     if (filterForm.data.start_date) {
       queryParams.start_date = filterForm.data.start_date;
     }
-    
+
     if (filterForm.data.end_date) {
       queryParams.end_date = filterForm.data.end_date;
     }
@@ -221,7 +221,7 @@ export default function CustomerLedger({
 
   const clearFilters = () => {
     if (!customer) return;
-    
+
     filterForm.setData({
       search: "",
       start_date: "",
@@ -372,13 +372,13 @@ export default function CustomerLedger({
 
   const handleDueClearanceSubmit = (e) => {
     e.preventDefault();
-    
+
     const paidAmount = parseFloat(paymentForm.paid_amount) || 0;
     if (paidAmount <= 0) {
       alert("Please enter a valid payment amount");
       return;
     }
-    
+
     if (paidAmount > dueAmount) {
       alert(`Payment amount cannot exceed total due amount of ৳${formatCurrency(dueAmount)}`);
       return;
@@ -455,7 +455,7 @@ export default function CustomerLedger({
     const paid = parseFloat(paymentForm.paid_amount) || 0;
     const remainingDue = dueAmount - paid;
     const newAdvance = advanceAmount + paid;
-    
+
     return {
       remainingDue: Math.max(0, remainingDue),
       newAdvance: newAdvance
@@ -466,7 +466,7 @@ export default function CustomerLedger({
     const { remainingDue, newAdvance } = calculateRemainingBalance();
     const paidAmount = parseFloat(paymentForm.paid_amount) || 0;
     const selectedDue = calculateSelectedDue();
-    
+
     return (
       <div className="bg-gradient-to-r from-white to-emerald-50 rounded-xl shadow-lg border border-emerald-100 mb-8">
         <div className="p-6">
@@ -501,7 +501,7 @@ export default function CustomerLedger({
                       <p className="text-sm text-gray-600">{customer?.phone || 'No phone'}</p>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
                       <span className="text-sm text-gray-600">Current Balance</span>
@@ -677,7 +677,7 @@ export default function CustomerLedger({
                     {showAdvancedOptions ? 'Hide' : 'Show'} Advanced Options
                     <ArrowRight className={`h-3 w-3 transition-transform ${showAdvancedOptions ? 'rotate-90' : ''}`} />
                   </button>
-                  
+
                   {showAdvancedOptions && (
                     <div className="p-4 bg-gray-50 rounded-lg">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -761,11 +761,10 @@ export default function CustomerLedger({
                       >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <div className={`h-4 w-4 rounded-full border flex items-center justify-center ${
-                              selectedSales.some(s => s.id === sale.id) 
-                                ? 'bg-blue-600 border-blue-600' 
-                                : 'border-gray-300'
-                            }`}>
+                            <div className={`h-4 w-4 rounded-full border flex items-center justify-center ${selectedSales.some(s => s.id === sale.id)
+                              ? 'bg-blue-600 border-blue-600'
+                              : 'border-gray-300'
+                              }`}>
                               {selectedSales.some(s => s.id === sale.id) && (
                                 <Check className="h-3 w-3 text-white" />
                               )}
@@ -806,7 +805,7 @@ export default function CustomerLedger({
   return (
     <div className="min-h-screen bg-gray-50">
       <Head title={`${customer?.customer_name || 'Customer'} Ledger`} />
-      
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header Section */}
         <div className="mb-8">
@@ -825,19 +824,21 @@ export default function CustomerLedger({
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowDueClearance(!showDueClearance)}
-                className={`px-4 py-2.5 text-sm font-medium rounded-xl flex items-center gap-2 shadow-sm hover:shadow transition-all ${
-                  showDueClearance
+
+              {Number(dueAmount) < 0 && (
+                <button
+                  onClick={() => setShowDueClearance(!showDueClearance)}
+                  className={`px-4 py-2.5 text-sm font-medium rounded-xl flex items-center gap-2 shadow-sm hover:shadow transition-all ${showDueClearance
                     ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     : 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white hover:from-emerald-700 hover:to-emerald-800'
-                }`}
-              >
-                <CheckCircle className="h-4 w-4" />
-                {showDueClearance ? 'Hide Due Clearance' : 'Clear Due Amount'}
-              </button>
+                    }`}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  {showDueClearance ? 'Hide Due Clearance' : 'Clear Due Amount'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -877,7 +878,7 @@ export default function CustomerLedger({
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex flex-col md:items-end gap-2">
                 <div className={`text-2xl font-bold ${(customer?.advance_amount || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                   ৳{formatCurrency(customer?.advance_amount || 0)}
@@ -899,7 +900,7 @@ export default function CustomerLedger({
               <Filter className="h-5 w-5" />
               Filter Transactions
             </h3>
-            
+
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
@@ -977,7 +978,7 @@ export default function CustomerLedger({
             icon={DollarSign}
             color="bg-gradient-to-br from-emerald-500/10 to-emerald-600/10 text-emerald-600"
           />
-          
+
           <StatCard
             title="Total Transactions"
             value={stats?.total_transactions || 0}
@@ -985,7 +986,7 @@ export default function CustomerLedger({
             icon={Receipt}
             color="bg-gradient-to-br from-blue-500/10 to-blue-600/10 text-blue-600"
           />
-          
+
           <StatCard
             title="Total Due Amount"
             value={`৳${formatCurrency(stats?.total_due || 0)}`}
@@ -993,7 +994,7 @@ export default function CustomerLedger({
             icon={TrendingUp}
             color="bg-gradient-to-br from-purple-500/10 to-purple-600/10 text-purple-600"
           />
-          
+
           <StatCard
             title="Current Balance"
             value={`৳${formatCurrency(customer?.advance_amount || 0)}`}
@@ -1020,7 +1021,7 @@ export default function CustomerLedger({
                 </div>
               </div>
               <div className="h-64">
-                <Line 
+                <Line
                   data={monthlyChartData}
                   options={{
                     responsive: true,
@@ -1034,7 +1035,7 @@ export default function CustomerLedger({
                       y: {
                         beginAtZero: true,
                         ticks: {
-                          callback: function(value) {
+                          callback: function (value) {
                             return '৳' + formatCurrency(value);
                           }
                         }
@@ -1062,7 +1063,7 @@ export default function CustomerLedger({
               </div>
               <div className="h-64 flex items-center justify-center">
                 <div className="w-full max-w-xs">
-                  <Pie 
+                  <Pie
                     data={paymentChartData}
                     options={{
                       responsive: true,
@@ -1105,11 +1106,10 @@ export default function CustomerLedger({
             <nav className="flex flex-wrap px-6" aria-label="Tabs">
               <button
                 onClick={() => setActiveTab('transactions')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'transactions'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'transactions'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <Receipt className="h-4 w-4" />
@@ -1118,11 +1118,10 @@ export default function CustomerLedger({
               </button>
               <button
                 onClick={() => setActiveTab('details')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'details'
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'details'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4" />
@@ -1159,7 +1158,7 @@ export default function CustomerLedger({
                           Total Amount
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
-                         Paid Amount
+                          Paid Amount
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
                           Due Amount
@@ -1292,7 +1291,7 @@ export default function CustomerLedger({
                       )}
                     </div>
                   </div>
-                  
+
                   <div className="space-y-4">
                     <h4 className="text-lg font-semibold text-gray-900">Transaction Summary</h4>
                     <div className="bg-gray-50 rounded-lg p-4 space-y-3">

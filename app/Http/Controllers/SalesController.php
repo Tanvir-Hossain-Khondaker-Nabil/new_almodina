@@ -210,7 +210,7 @@ class SalesController extends Controller
 
         $customers = Customer::all();
 
-        $stock = Stock::with(['warehouse', 'product.category', 'product.brand', 'variant'])
+        $stock = Stock::with(['warehouse', 'product.category', 'product','product.brand', 'variant'])
             ->where('quantity', '>', 0)
             ->orderBy('created_at', 'asc')
             ->get();
@@ -237,7 +237,7 @@ class SalesController extends Controller
     public function store(Request $request)
     {
 
-        //dd($request->all());
+        // dd($request->all());
 
         $type = $request->input('type', 'pos');
 

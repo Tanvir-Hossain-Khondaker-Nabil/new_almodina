@@ -220,6 +220,8 @@ export default function Product({ product, filters }) {
                                         <div className="text-sm text-gray-500">{selectedBarcode.variantName}</div>
                                     </div>
 
+                                    
+
                                     <div className="barcode-container bg-white p-4 rounded-lg border border-gray-200">
                                         <img 
                                             src={generateBarcodeImage(selectedBarcode.barcode)} 
@@ -381,6 +383,7 @@ export default function Product({ product, filters }) {
                                                     </div>
                                                 </div>
                                             </td>
+                                            
                                             <td className="max-w-[300px]">
                                                 <div className="flex flex-col gap-2">
                                                     {!isExpanded && variantsCount > 1 && (
@@ -398,6 +401,7 @@ export default function Product({ product, filters }) {
                                                         const variantStock = variant.stock?.quantity || 0;
                                                         const variantPrice = variant.stock?.sale_price || 0;
                                                         const barcodes = getVariantBarcodes(variant);
+                                                        
                                                         
                                                         return (
                                                             <div
@@ -458,19 +462,18 @@ export default function Product({ product, filters }) {
                                                     
                                                     {totalBarcodes > 0 && (
                                                         <div className="space-y-1">
-                                                            {productItem.variants?.flatMap((variant, vIndex) => 
-                                                                getVariantBarcodes(variant).map((barcodeData, bIndex) => (
-                                                                    <div key={`${variant.id}-${bIndex}`} className="flex items-center justify-between bg-gray-50 p-1 rounded text-xs">
+                                                            {productItem.stocks?.map((variant, vIndex) => 
+                                                               <div key={`${variant.id}-${vIndex}`} className="flex items-center justify-between bg-gray-50 p-1 rounded text-xs">
                                                                         <span className="font-mono truncate max-w-[80px]">
-                                                                            {barcodeData.barcode}
+                                                                            {variant.barcode}
                                                                         </span>
                                                                         <div className="flex gap-1">
                                                                             <button
                                                                                 onClick={() => viewBarcodeDetails(
-                                                                                    barcodeData.barcode,
+                                                                                    variant.barcode,
                                                                                     productItem.name,
                                                                                     formatVariantDisplay(variant),
-                                                                                    barcodeData
+                                                                                    variant
                                                                                 )}
                                                                                 className="btn btn-xs btn-ghost"
                                                                                 title="View Barcode"
@@ -478,7 +481,7 @@ export default function Product({ product, filters }) {
                                                                                 <Eye size={10} />
                                                                             </button>
                                                                             <button
-                                                                                onClick={() => copyBarcode(barcodeData.barcode)}
+                                                                                onClick={() => copyBarcode(variant.barcode)}
                                                                                 className="btn btn-xs btn-ghost"
                                                                                 title="Copy Barcode"
                                                                             >
@@ -486,7 +489,6 @@ export default function Product({ product, filters }) {
                                                                             </button>
                                                                         </div>
                                                                     </div>
-                                                                ))
                                                             )}
                                                         </div>
                                                     )}

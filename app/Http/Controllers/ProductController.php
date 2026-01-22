@@ -99,7 +99,7 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         $products = Product::latest()
-            ->with(['category', 'brand', 'variants.stock'])
+            ->with(['category', 'brand', 'variants','stocks'])
             ->filter($request->only('search'))
             ->paginate(10);
 
@@ -120,6 +120,10 @@ class ProductController extends Controller
             
             return $product;
         });
+
+        
+
+    //logger()->info(json_encode($products,JSON_PRETTY_PRINT));
 
         return Inertia::render("product/Product", [
             'filters' => $request->only('search'),

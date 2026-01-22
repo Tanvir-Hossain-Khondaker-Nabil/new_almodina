@@ -77,6 +77,15 @@ class Product extends Model
     {
         return $this->hasMany(Variant::class)->with('stock');
     }
+    public function stocks()
+    {
+        return $this->hasMany(Stock::class,'product_id');
+    }
+    
+
+
+
+
 
     public function brand()
     {

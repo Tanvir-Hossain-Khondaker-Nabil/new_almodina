@@ -82,9 +82,14 @@ export default function AddSale({
     const [availableUnits, setAvailableUnits] = useState({});
     const [productDetails, setProductDetails] = useState({});
     const [stockDetails, setStockDetails] = useState({});
-    const [basePrices, setBasePrices] = useState({}); // Store base unit price for auto-calculation
+    const [basePrices, setBasePrices] = useState({});
 
-    // ✅ BARCODE SCANNER (Sunlux XL-6500 keyboard wedge)
+    // Batch selection modal state
+    const [showBatchModal, setShowBatchModal] = useState(false);
+    const [availableBatches, setAvailableBatches] = useState([]);
+    const [selectedVariantForBatch, setSelectedVariantForBatch] = useState(null);
+
+    // BARCODE SCANNER
     const barcodeRef = useRef(null);
     const [scanError, setScanError] = useState("");
     const [autoFocusScanner, setAutoFocusScanner] = useState(true);
@@ -640,7 +645,6 @@ export default function AddSale({
 
     // ============================================
     // ✅ IMPORTANT: handleVariantSelect MUST be defined BEFORE barcode handlers
-    // Using function declaration => hoisted (no "before initialization" error)
     // ============================================
     function handleVariantSelect(variantWithStocks) {
         const {
@@ -655,14 +659,51 @@ export default function AddSale({
             stockId,
         } = variantWithStocks;
 
-        const availableStock = stocks.find((s) => s.quantity > 0) || stocks[0];
-        if (!availableStock) return;
+        // Find ALL available stocks for this variant
+        const availableStocks = stocks.filter((s) => s.quantity > 0);
 
-        const salePrice = Number(sale_price) || Number(availableStock.sale_price) || 0;
-        const shadowSalePrice =
-            Number(shadow_sale_price) ||
-            Number(availableStock.shadow_sale_price) ||
-            0;
+        if (availableStocks.length === 0) {
+            alert("No available stock for this variant");
+            return;
+        }
+
+        // If multiple batches exist, show batch selection modal
+        if (availableStocks.length > 1) {
+            setShowBatchModal(true);
+            setAvailableBatches(availableStocks);
+            setSelectedVariantForBatch({
+                variant,
+                stocks: availableStocks,
+                totalQuantity,
+                totalBaseQuantity,
+                sale_price,
+                shadow_sale_price,
+                unit,
+                product,
+                stockId,
+            });
+            return;
+        }
+
+        // Single batch - proceed directly
+        const availableStock = availableStocks[0];
+        proceedWithStockSelection(availableStock, variantWithStocks);
+    }
+
+    // Function to proceed with stock selection after batch is chosen
+    const proceedWithStockSelection = (selectedStock, variantWithStocks) => {
+        const {
+            variant,
+            sale_price,
+            shadow_sale_price,
+            unit,
+            product,
+        } = variantWithStocks;
+
+        const selectedSalePrice = Number(selectedStock.sale_price) || Number(sale_price) || 0;
+        const selectedShadowSalePrice =
+            Number(selectedStock.shadow_sale_price) ||
+            Number(shadow_sale_price) || 0;
 
         // Get product details
         const pDetails = getProductDetails(product.id);
@@ -671,10 +712,10 @@ export default function AddSale({
             [product.id]: pDetails,
         }));
 
-        // Get available units for this stock
+        // Get available units for this specific stock
         const availableUnitsForStock = getAvailableUnitsForProduct(
             product,
-            availableStock
+            selectedStock
         );
 
         // Determine default sale unit
@@ -683,18 +724,18 @@ export default function AddSale({
             defaultUnit = availableUnitsForStock[0] || "piece";
         }
 
-        // ✅ NEW: Calculate base price per base unit (store for auto-calculation)
-        let basePricePerBaseUnit = salePrice;
+        // Calculate base price per base unit
+        let basePricePerBaseUnit = selectedSalePrice;
         if (pDetails?.unit_type && pDetails.unit_type !== "piece") {
             basePricePerBaseUnit = calculateBasePricePerBaseUnit(
-                salePrice,
+                selectedSalePrice,
                 unit,
                 pDetails.unit_type
             );
         }
 
-        // ✅ NEW: Calculate price in sale unit using base price
-        let unitPriceInSaleUnit = salePrice;
+        // Calculate price in sale unit using base price
+        let unitPriceInSaleUnit = selectedSalePrice;
         if (unit !== defaultUnit && pDetails?.unit_type) {
             unitPriceInSaleUnit = calculatePriceForUnit(
                 basePricePerBaseUnit,
@@ -703,7 +744,8 @@ export default function AddSale({
             );
         }
 
-        const itemKey = `${product.id}-${variant.id}-${availableStock.batch_no || "default"}`;
+        // Create unique key with batch number
+        const itemKey = `${product.id}-${variant.id}-${selectedStock.batch_no || "default"}`;
         const existingItem = selectedItems.find((item) => item.uniqueKey === itemKey);
 
         if (existingItem) {
@@ -730,7 +772,7 @@ export default function AddSale({
                 uniqueKey: itemKey,
                 product_id: product.id,
                 variant_id: variant.id,
-                batch_no: availableStock.batch_no,
+                batch_no: selectedStock.batch_no,
                 product_name: product.name,
                 variant_attribute:
                     selectedBrand ||
@@ -744,19 +786,18 @@ export default function AddSale({
                 unit_quantity: 1,
                 unit: defaultUnit,
                 sku: variant.sku || "Default SKU",
-                stockQuantity: totalQuantity,
-                stockBaseQuantity: totalBaseQuantity,
-                stockId: stockId,
+                stockQuantity: Number(selectedStock.quantity) || 0,
+                stockBaseQuantity: Number(selectedStock.base_quantity) || Number(selectedStock.quantity) || 0,
+                stockId: selectedStock.id,
                 original_purchase_unit: unit,
-                original_sale_price: salePrice, // Price in purchase unit
-                unit_price: unitPriceInSaleUnit, // Price in sale unit (auto-calculated)
+                original_sale_price: selectedSalePrice,
+                unit_price: unitPriceInSaleUnit,
                 sell_price: unitPriceInSaleUnit,
                 total_price: unitPriceInSaleUnit,
-                shadow_sell_price: shadowSalePrice,
+                shadow_sell_price: selectedShadowSalePrice,
                 product_unit_type: pDetails?.unit_type || "piece",
                 is_fraction_allowed: pDetails?.is_fraction_allowed || false,
-                stockDetails: availableStock,
-                // ✅ NEW: Store base price for auto-calculation
+                stockDetails: selectedStock,
                 base_price_per_base_unit: basePricePerBaseUnit,
             };
 
@@ -767,8 +808,7 @@ export default function AddSale({
                 ...prev,
                 [itemKey]: availableUnitsForStock,
             }));
-            setStockDetails((prev) => ({ ...prev, [itemKey]: availableStock }));
-            // ✅ NEW: Store base price for this item
+            setStockDetails((prev) => ({ ...prev, [itemKey]: selectedStock }));
             setBasePrices((prev) => ({
                 ...prev,
                 [itemKey]: basePricePerBaseUnit,
@@ -776,7 +816,19 @@ export default function AddSale({
         }
 
         resetSelectionFlow();
-    }
+    };
+
+    // Batch selection handler
+    const handleBatchSelect = (selectedStock) => {
+        if (!selectedVariantForBatch || !selectedStock) return;
+
+        proceedWithStockSelection(selectedStock, selectedVariantForBatch);
+
+        // Close batch modal and reset
+        setShowBatchModal(false);
+        setAvailableBatches([]);
+        setSelectedVariantForBatch(null);
+    };
 
     // ✅ UPDATED: Handle unit change with auto price calculation
     const handleUnitChange = (itemKey, newUnit) => {
@@ -947,14 +999,10 @@ export default function AddSale({
     // ============================================
     // ✅ BARCODE SCAN HANDLERS (Batch No first)
     // ============================================
-    const [barcodeValue, setBarcodeValue] = useState("");
-
     const handleBarcodeScan = useCallback(
         (raw) => {
-
             const code = String(raw || "").trim();
             if (!code) return;
-            
 
             setScanError("");
 
@@ -992,58 +1040,57 @@ export default function AddSale({
         [scanIndex, handleProductSelect, buildVariantWithStocksFromStockRow]
     );
 
-    const onBarcodeKeyDown = (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            const val = barcodeValue;
-            setBarcodeValue("");
-            handleBarcodeScan(val);
-        }
-    };
-
     // automotion
-    // const SCAN_TIMEOUT = 100;
-    // const [barcode, setBarcode] = useState("");
-    // const lastScanTimeRef = useRef(Date.now());
-    // useEffect(() => {
-    //     const handleKeydown = (e) => {
-    //         const now = Date.now();
+    const SCAN_TIMEOUT = 100;
+    const barcodeRefNew = useRef("");
+    const lastScanTimeRef = useRef(0);
 
-    //         // ❌ Ignore control keys
-    //         if (
-    //             e.key === "Shift" ||
-    //             e.key === "Alt" ||
-    //             e.key === "Control" ||
-    //             e.key === "Tab"
-    //         ) {
-    //             return;
-    //         }
+    useEffect(() => {
+        const handleKeydown = (e) => {
+            // Prevent default for all keys during scanning
+            e.preventDefault();
 
-    //         // ✅ Barcode ends with Enter
-    //         if (e.key === "Enter") {
-    //             if (barcode.trim().length > 0) {
-    //                 console.log("Final Barcode:", barcode);
-    //                 handleBarcodeScan(barcode);
-    //                 setBarcode("");
-    //             }
-    //             return;
-    //         }
+            const now = Date.now();
 
-    //         // ⏱️ Detect scanner speed
-    //         if (now - lastScanTimeRef.current > SCAN_TIMEOUT) {
-    //             setBarcode(e.key);
-    //         } else {
-    //             setBarcode((prev) => prev + e.key);
-    //         }
+            // Filter out special keys more comprehensively
+            const ignoredKeys = [
+                'Shift', 'Alt', 'Control', 'Meta', 'CapsLock',
+                'Escape', 'Tab', 'Backspace', 'Delete',
+                'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+                'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'
+            ];
 
-    //         lastScanTimeRef.current = now;
-    //     };
+            if (ignoredKeys.includes(e.key)) {
+                return;
+            }
 
-    //     window.addEventListener("keydown", handleKeydown);
-    //     return () => window.removeEventListener("keydown", handleKeydown);
-    // }, [barcode, handleBarcodeScan]);
-    // console.log(barcode);
-    
+            // Handle Enter key (barcode end)
+            if (e.key === 'Enter') {
+                if (barcodeRefNew.current.length > 0) {
+                    console.log('Scanned code:', barcodeRefNew.current);
+                    handleBarcodeScan(barcodeRefNew.current);
+                    barcodeRefNew.current = "";
+                }
+                return;
+            }
+
+            // Handle character keys only (skip special characters)
+            if (e.key.length === 1) {
+                if (now - lastScanTimeRef.current > SCAN_TIMEOUT) {
+                    // New scan starting
+                    barcodeRefNew.current = e.key;
+                } else {
+                    // Continuing scan
+                    barcodeRefNew.current += e.key;
+                }
+
+                lastScanTimeRef.current = now;
+            }
+        };
+
+        window.addEventListener('keydown', handleKeydown, true); // Use capture phase
+        return () => window.removeEventListener('keydown', handleKeydown, true);
+    }, [handleBarcodeScan]);
 
     // ✅ Auto-focus scanner input
     useEffect(() => {
@@ -1614,60 +1661,6 @@ export default function AddSale({
                             </div>
                         </div>
 
-                        {/* ✅ BARCODE SCANNER BAR (Sunlux XL-6500) */}
-                        <div className="mb-4 border border-gray-200 rounded-2xl p-3 bg-gray-50">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="flex-1">
-                                    <div className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white border">
-                                            📟
-                                        </span>
-                                        Barcode Scan (Batch No / SKU / Code)
-                                    </div>
-
-                                    <div className="text-xs text-gray-500 mt-1">
-                                        Tip: Sunlux scans and presses <b>Enter</b> automatically.
-                                    </div>
-
-                                    <input
-                                        ref={barcodeRef}
-                                        value={barcodeValue}
-                                        onChange={(e) => setBarcodeValue(e.target.value)}
-                                        onKeyDown={onBarcodeKeyDown}
-                                        className="input input-bordered input-sm w-full mt-2 bg-white"
-                                        placeholder="Click here and scan..."
-                                    />
-
-                                    {scanError && (
-                                        <div className="mt-2 text-xs text-red-600 flex items-center gap-2">
-                                            <AlertCircle size={14} />
-                                            {scanError}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex flex-col items-end gap-2">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            className="checkbox checkbox-sm checkbox-primary"
-                                            checked={autoFocusScanner}
-                                            onChange={(e) => setAutoFocusScanner(e.target.checked)}
-                                        />
-                                        <span className="text-xs text-gray-600">Auto Focus</span>
-                                    </label>
-
-                                    <button
-                                        type="button"
-                                        className="btn btn-xs btn-outline"
-                                        onClick={() => barcodeRef.current?.focus()}
-                                    >
-                                        Focus Scanner
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
                         {/* Stock products */}
                         <div className="mb-6">
                             <div className="flex justify-between items-center mb-2">
@@ -1832,6 +1825,7 @@ export default function AddSale({
                                         {availableVariants.map((variantWithStocks) => {
                                             const {
                                                 variant,
+                                                stocks,
                                                 totalQuantity,
                                                 totalBaseQuantity,
                                                 sale_price,
@@ -1844,10 +1838,9 @@ export default function AddSale({
                                                 ? variant.attribute_values?.[selectedBrand] || "Default"
                                                 : Object.values(variant.attribute_values || {})[0] || "Default";
 
-                                            const availableUnitsForStock = getAvailableUnitsForProduct(
-                                                product,
-                                                variantWithStocks.stocks[0]
-                                            );
+                                            // Get available batches
+                                            const availableStocks = stocks.filter((s) => s.quantity > 0);
+                                            const batchCount = availableStocks.length;
 
                                             return (
                                                 <div
@@ -1862,9 +1855,24 @@ export default function AddSale({
                                                             <div className="text-xs text-gray-500 mt-1">
                                                                 <div>Purchase Unit: {unit?.toUpperCase()}</div>
                                                                 <div>
-                                                                    Available: {totalQuantity} {unit?.toUpperCase()} (
+                                                                    Total Available: {totalQuantity} {unit?.toUpperCase()} (
                                                                     {totalBaseQuantity.toFixed(3)} base units)
                                                                 </div>
+                                                                <div className="flex items-center gap-1">
+                                                                    <Warehouse size={10} />
+                                                                    Batches: {batchCount}
+                                                                    {batchCount > 1 && (
+                                                                        <span className="text-blue-600 ml-1">
+                                                                            (Click to select batch)
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {/* Show batch details if only one batch */}
+                                                                {batchCount === 1 && availableStocks[0].batch_no && (
+                                                                    <div className="mt-1">
+                                                                        <span className="text-blue-600">Batch: {availableStocks[0].batch_no}</span>
+                                                                    </div>
+                                                                )}
                                                                 <div>
                                                                     Price: {formatWithSymbol(Number(sale_price) || 0)} per{" "}
                                                                     {unit?.toUpperCase()}
@@ -1873,14 +1881,6 @@ export default function AddSale({
                                                                     <div>Shadow Price: {formatWithSymbol(Number(shadow_sale_price))}</div>
                                                                 )}
                                                             </div>
-
-                                                            {availableUnitsForStock.length > 1 && (
-                                                                <div className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                                                                    <Ruler size={10} />
-                                                                    Can sell in:{" "}
-                                                                    {availableUnitsForStock.map((u) => u.toUpperCase()).join(", ")}
-                                                                </div>
-                                                            )}
                                                         </div>
                                                         <Plus size={16} className="text-primary" />
                                                     </div>
@@ -1918,7 +1918,7 @@ export default function AddSale({
                                                         </p>
                                                         <p className="text-sm text-gray-600">
                                                             <strong>Purchase Unit:</strong>{" "}
-                                                            {item.original_purchase_unit?.toUpperCase()} • <strong> Available:</strong>{" "}
+                                                            {item.original_purchase_unit?.toUpperCase()} • <strong>Available in this batch:</strong>{" "}
                                                             {item.stockQuantity} {item.original_purchase_unit?.toUpperCase()}
                                                             {item.product_unit_type && item.product_unit_type !== "piece" && (
                                                                 <span>
@@ -1927,6 +1927,12 @@ export default function AddSale({
                                                                 </span>
                                                             )}
                                                         </p>
+                                                        {/* Show warehouse info if available */}
+                                                        {item.stockDetails?.warehouse && (
+                                                            <p className="text-sm text-gray-600">
+                                                                <strong>Warehouse:</strong> {item.stockDetails.warehouse.name}
+                                                            </p>
+                                                        )}
                                                     </div>
 
                                                     <button
@@ -2654,6 +2660,117 @@ export default function AddSale({
                                 className="btn bg-[#1e4d2b] text-white"
                             >
                                 Create Supplier
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Batch Selection Modal */}
+            {showBatchModal && selectedVariantForBatch && (
+                <div className="modal modal-open">
+                    <div className="modal-box max-w-2xl">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold">
+                                Select Batch for {selectedVariantForBatch.product?.name} - {
+                                    Object.values(selectedVariantForBatch.variant?.attribute_values || {})[0] || "Default"
+                                }
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowBatchModal(false);
+                                    setAvailableBatches([]);
+                                    setSelectedVariantForBatch(null);
+                                }}
+                                className="btn btn-sm btn-circle btn-ghost"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <h4 className="font-semibold mb-2">Available Batches</h4>
+                                <p className="text-sm text-gray-600 mb-3">
+                                    Select a batch to add to sale. Different batches may have different prices.
+                                </p>
+                            </div>
+
+                            <div className="overflow-y-auto max-h-96">
+                                {availableBatches.map((stock, index) => (
+                                    <div
+                                        key={stock.id || index}
+                                        className="p-4 border border-gray-200 rounded-lg mb-3 hover:bg-gray-50 cursor-pointer"
+                                        onClick={() => handleBatchSelect(stock)}
+                                    >
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex-1">
+                                                <div className="font-medium flex items-center gap-2">
+                                                    <Warehouse size={14} className="text-blue-600" />
+                                                    Batch: {stock.batch_no || "No Batch No"}
+                                                </div>
+                                                <div className="text-sm text-gray-600 mt-2 grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <span className="font-medium">Available:</span> {stock.quantity} {stock.unit?.toUpperCase()}
+                                                        {stock.base_quantity && (
+                                                            <span className="ml-1 text-gray-500">
+                                                                ({Number(stock.base_quantity).toFixed(3)} base units)
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-medium">Purchase Price:</span> {formatWithSymbol(stock.purchase_price || 0)}
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-medium">Sale Price:</span> {formatWithSymbol(stock.sale_price || 0)}
+                                                    </div>
+                                                    {stock.shadow_sale_price > 0 && (
+                                                        <div>
+                                                            <span className="font-medium">Shadow Price:</span> {formatWithSymbol(stock.shadow_sale_price || 0)}
+                                                        </div>
+                                                    )}
+                                                    <div>
+                                                        <span className="font-medium">Warehouse:</span> {stock.warehouse?.name || "Main"}
+                                                    </div>
+                                                    {stock.expiry_date && (
+                                                        <div>
+                                                            <span className="font-medium">Expiry:</span> {stock.expiry_date}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="ml-4">
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-primary"
+                                                    onClick={() => handleBatchSelect(stock)}
+                                                >
+                                                    Select
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {availableBatches.length === 0 && (
+                                <div className="text-center py-8">
+                                    <AlertCircle size={32} className="mx-auto text-gray-400 mb-2" />
+                                    <p className="text-gray-500">No available batches found</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="modal-action">
+                            <button
+                                onClick={() => {
+                                    setShowBatchModal(false);
+                                    setAvailableBatches([]);
+                                    setSelectedVariantForBatch(null);
+                                }}
+                                className="btn btn-ghost"
+                            >
+                                Cancel
                             </button>
                         </div>
                     </div>
