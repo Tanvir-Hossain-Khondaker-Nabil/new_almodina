@@ -1053,16 +1053,7 @@ export default function AddSale({
             const now = Date.now();
 
             // Filter out special keys more comprehensively
-            const ignoredKeys = [
-                'Shift', 'Alt', 'Control', 'Meta', 'CapsLock',
-                'Escape', 'Tab', 'Backspace', 'Delete',
-                'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-                'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'
-            ];
 
-            if (ignoredKeys.includes(e.key)) {
-                return;
-            }
 
             // Handle Enter key (barcode end)
             if (e.key === 'Enter') {

@@ -604,6 +604,7 @@ export default function AddSale({
 
     useEffect(() => {
         const handleKeydown = (e) => {
+            e.preventDefault();
             const now = Date.now();
 
             // Ignore control and navigation keys
