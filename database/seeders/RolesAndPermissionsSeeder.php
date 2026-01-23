@@ -19,7 +19,6 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // ========== ALL PERMISSIONS ==========
         $permissions = [
-
             // Dashboard
             'dashboard.view',
 
@@ -167,33 +166,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'companies.update',
             'companies.delete',
 
-            // Dealerships
-            'dealerships.view',
-            'dealerships.create',
-            'dealerships.show',
-            'dealerships.edit',
-            'dealerships.update',
-            'dealerships.delete',
-            'dealerships.approve',
-
-            // Plans
-            'plans.view',
-            'plans.create',
-            'plans.show',
-            'plans.edit',
-            'plans.update',
-            'plans.delete',
-
-            // Subscriptions
-            'subscriptions.view',
-            'subscriptions.create',
-            'subscriptions.show',
-            'subscriptions.edit',
-            'subscriptions.update',
-            'subscriptions.delete',
-            'subscriptions.renew',
-            'subscriptions.payments_view',
-
             // Attendance
             'attendance.view',
             'attendance.create',
@@ -296,14 +268,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'bonus.apply_eid',
             'bonus.apply_festival',
 
-            // Modules
-            'modules.view',
-            'modules.create',
-            'modules.edit',
-            'modules.delete',
-            'modules.update',
-            'modules.show',
-
             // Exchange
             'exchange.view',
             'exchange.create',
@@ -359,10 +323,22 @@ class RolesAndPermissionsSeeder extends Seeder
             'sms_templates.delete',
             'sms_templates.show',
             'sms_templates.toggle_status',
+
+            // Note: Removed duplicate 'roles' and 'users' entries
         ];
 
+        // Get all existing permission names
+        $existingPermissions = Permission::pluck('name')->toArray();
+        
+        // Create or update permissions
         foreach ($permissions as $permission) {
             Permission::updateOrCreate(['name' => $permission]);
+        }
+        
+        // Delete permissions that are no longer in the list
+        $permissionsToDelete = array_diff($existingPermissions, $permissions);
+        if (!empty($permissionsToDelete)) {
+            Permission::whereIn('name', $permissionsToDelete)->delete();
         }
 
         // ========== ROLES ==========
@@ -370,96 +346,54 @@ class RolesAndPermissionsSeeder extends Seeder
         $superAdmin->syncPermissions(Permission::all());
 
         $admin = Role::updateOrCreate(['name' => 'Admin']);
-
-        $excluded = [
-            // Plans
-            'plans.view',
-            'plans.create',
-            'plans.show',
-            'plans.edit',
-            'plans.update',
-            'plans.delete',
-            // Subscriptions
-            'subscriptions.view',
-            'subscriptions.create',
-            'subscriptions.show',
-            'subscriptions.edit',
-            'subscriptions.update',
-            'subscriptions.delete',
-            'subscriptions.renew',
-            'subscriptions.payments_view',
-            // Modules
-            'modules.view',
-            'modules.create',
-            'modules.edit',
-            'modules.delete',
-            'modules.update',
-            'modules.show',
-            'users.view',
-            'users.create',
-            'users.edit',
-            'users.delete',
-            'roles.view',
-            'roles.create',
-            'roles.edit',
-            'roles.delete',
-            'roles.show',
-        ];
-
-        $admin->syncPermissions(
-            Permission::whereNotIn('name', $excluded)->get()
-        );
+        // If you want Admin to have all permissions like Super Admin
+        $admin->syncPermissions(Permission::all());
 
         // ========== USERS ==========
         $superAdminUser = User::updateOrCreate(
             ['email' => 'superadmin@system.com'],
-            ['name' => 'Super Admin', 'password' => bcrypt('password123'), 'email_verified_at' => now()]
+            [
+                'name' => 'Super Admin', 
+                'password' => bcrypt('password123'), 
+                'email_verified_at' => now(),
+                // Make sure to add any other required fields based on your User model
+            ]
         );
         $superAdminUser->syncRoles(['Super Admin']);
 
         // === Supplier Create ======
-
         Supplier::updateOrCreate(
             ['email' => 'pickup@mail.com'],
             [
-                'name'            => 'Supplier User',
-                'contact_person'  => 'Supplier User',
-                'email'           => 'pickup@mail.com',
-                'phone'           => '0123456789',
-                'company'         => 'Pickup Supplier',
-                'address'         => 'N/A',
-                'advance_amount'  => 0,
-                'due_amount'      => 0,
-                'is_active'       => 1,
-                'created_by'      => Auth::id() ?? 1,
-                'outlet_id'       => 1 ?? null,
-                'dealership_id'   => null,
+                'name' => 'Supplier User',
+                'contact_person' => 'Supplier User',
+                'email' => 'pickup@mail.com',
+                'phone' => '0123456789',
+                'company' => 'Pickup Supplier',
+                'address' => 'N/A',
+                'advance_amount' => 0,
+                'due_amount' => 0,
+                'is_active' => 1,
+                'created_by' => 1, // Use default ID instead of Auth::id()
+                'outlet_id' => 1 ?? null,
+                'dealership_id' => null,
             ]
         );
 
         // === Customer Create ======
-
         Customer::updateOrCreate(
-            ['phone' => '100100100'], 
+            ['phone' => '100100100'],
             [
-                'customer_name'   => 'walk-in-customer',
-                'address'         => 'N/A',
-                'phone'           => '100100100',
-                'is_active'       => 1,
-                'advance_amount'  => 0,
-                'due_amount'      => 0,
-                'created_by'      => Auth::id() ?? 1,
-                'outlet_id'       => 1 ?? null,
+                'customer_name' => 'walk-in-customer',
+                'address' => 'N/A',
+                'phone' => '100100100',
+                'is_active' => 1,
+                'advance_amount' => 0,
+                'due_amount' => 0,
+                'created_by' => 1, // Use default ID instead of Auth::id()
+                'outlet_id' => 1 ?? null,
             ]
         );
-
-
-
-        // $adminUser = User::updateOrCreate(
-        //     ['email' => 'admin@system.com'],
-        //     ['name' => 'Admin User', 'password' => bcrypt('password123'), 'email_verified_at' => now()]
-        // );
-        // $adminUser->syncRoles(['Admin']);
 
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
     }

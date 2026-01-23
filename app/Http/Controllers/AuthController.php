@@ -33,12 +33,6 @@ class AuthController extends Controller
                 return back()->with('error', 'The provided credentials do not match our records.');
             }
 
-            if (!$user->isSuperAdmin()) {
-                if (!$user->hasValidSubscription()) {
-                    return back()->with('error', 'Your subscription is not active or has expired. Please renew to login.');
-                }
-            }
-
             $credentials = $request->only('email', 'password');
 
             if (Auth::attempt($credentials, $request->filled('remember'))) {
@@ -51,6 +45,38 @@ class AuthController extends Controller
             return redirect()->back()->with('error', 'An error occurred while logging in.');
         }
     }
+    // public function login(Request $request)
+    // {
+    //     $request->validate([
+    //         'email' => 'required|email|lowercase',
+    //         'password' => 'required|string|min:6',
+    //     ]);
+
+    //     try {
+    //         $user = User::where('email', $request->email)->first();
+
+    //         if (!$user) {
+    //             return back()->with('error', 'The provided credentials do not match our records.');
+    //         }
+
+    //         if (!$user->isSuperAdmin()) {
+    //             if (!$user->hasValidSubscription()) {
+    //                 return back()->with('error', 'Your subscription is not active or has expired. Please renew to login.');
+    //             }
+    //         }
+
+    //         $credentials = $request->only('email', 'password');
+
+    //         if (Auth::attempt($credentials, $request->filled('remember'))) {
+    //             $request->session()->regenerate();
+    //             return redirect()->route('home')->with('success', 'Login successful');
+    //         }
+
+    //         return back()->with('error', 'The provided credentials do not match our records.');
+    //     } catch (\Exception $th) {
+    //         return redirect()->back()->with('error', 'An error occurred while logging in.');
+    //     }
+    // }
 
     public function logout()
     {

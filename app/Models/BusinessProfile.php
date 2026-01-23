@@ -6,9 +6,11 @@ use App\Scopes\UserScope;
 use App\Scopes\OutletScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 
 class BusinessProfile extends Model
 {
+    use BelongsToTenant;
     protected $fillable = [
         'name',
         'email',

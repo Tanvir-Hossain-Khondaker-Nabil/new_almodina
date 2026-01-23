@@ -75,7 +75,7 @@ export default function SalesReturnIndex({
         router.get(route('salesReturn.list'), {
             search,
             status: statusFilter,
-           type: typeFilter,
+            type: typeFilter,
             from_date: fromDate,
             to_date: toDate
         }, { preserveState: true, replace: true });
@@ -133,8 +133,8 @@ export default function SalesReturnIndex({
                         <label className="label py-1"><span className="label-text text-xs font-semibold">{t('sales_return.search', 'Search')}</span></label>
                         <div className="relative">
                             <Search className="absolute left-3 top-2.5 text-base-content/40" size={16} />
-                            <input 
-                                type="text" 
+                            <input
+                                type="text"
                                 placeholder={t('sales_return.search_placeholder', 'Search customer or invoice...')}
                                 className="input input-sm input-bordered w-full pl-3"
                                 value={search}
@@ -142,7 +142,7 @@ export default function SalesReturnIndex({
                             />
                         </div>
                     </div>
-                    
+
                     <div className="form-control w-full">
                         <label className="label py-1"><span className="label-text text-xs font-semibold">{t('sales_return.status', 'Status')}</span></label>
                         <select className="select select-sm select-bordered" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -159,26 +159,26 @@ export default function SalesReturnIndex({
 
                     <div className="form-control w-full">
                         <label className="label py-1"><span className="label-text text-xs font-semibold">{t('sales_return.from_date', 'From Date')}</span></label>
-                        <input 
-                            type="date" 
-                            className="input input-sm input-bordered" 
-                            value={fromDate} 
-                            onChange={(e) => setFromDate(e.target.value)} 
+                        <input
+                            type="date"
+                            className="input input-sm input-bordered"
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
                         />
                     </div>
 
                     <div className="form-control w-full">
                         <label className="label py-1"><span className="label-text text-xs font-semibold">{t('sales_return.to_date', 'To Date')}</span></label>
-                        <input 
-                            type="date" 
-                            className="input input-sm input-bordered" 
-                            value={toDate} 
+                        <input
+                            type="date"
+                            className="input input-sm input-bordered"
+                            value={toDate}
                             onChange={(e) => setToDate(e.target.value)}
                             min={fromDate}
                         />
                     </div>
                 </div>
-                
+
                 <div className="flex justify-end mt-4">
                     <button onClick={resetFilters} className="btn btn-sm btn-ghost mr-2">
                         <RefreshCw size={14} className="mr-1" />
@@ -217,7 +217,7 @@ export default function SalesReturnIndex({
                                             <div className="flex items-center gap-2">
                                                 <div className="p-2 bg-base-200 rounded-lg"><User size={14} /></div>
                                                 <div>
-                                                    <div className="font-bold">{item.customer?.customer_name  || 'Walk-in Customer'}</div>
+                                                    <div className="font-bold">{item.customer?.customer_name || 'Walk-in Customer'}</div>
                                                     <div className="text-xs opacity-50">
                                                         {item.customer?.phone || item.sale?.customer?.phone || ''}
                                                     </div>
@@ -250,21 +250,42 @@ export default function SalesReturnIndex({
                                             <div className="text-xs opacity-70">{formatDate(item.created_at)}</div>
                                         </td>
                                         <td className="text-right space-x-1">
-                                            {item.status === 'pending' && (
-                                                <button onClick={() => handleDelete(item)} className="btn btn-ghost btn-xs text-error" title={t('sales_return.delete', 'Delete')}>
-                                                    <Trash2 size={14} />
-                                                </button>
+                                            {item.status === "pending" && (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleDelete(item)}
+                                                        className="btn btn-ghost btn-xs text-error"
+                                                        title={t("sales_return.delete", "Delete")}
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+
+                                                    <button
+                                                        onClick={() => {
+                                                            if (confirm("Are you sure you want to approve this return?")) {
+                                                                router.post(route("return.approve", item.id), {}, {
+                                                                    preserveScroll: true,
+                                                                });
+                                                            }
+                                                        }}
+                                                        className="btn btn-ghost btn-xs text-success"
+                                                        title={t("sales_return.approve", "Approve")}
+                                                        disabled={router.processing}
+                                                    >
+                                                        <CheckCircle size={14} />
+                                                    </button>
+                                                </>
                                             )}
-                                            <button 
+                                            {/* <button
                                                 onClick={() => router.visit(route('sales-return.show', item.id))}
                                                 className="btn btn-ghost btn-xs text-info"
                                                 title={t('sales_return.view', 'View Details')}
                                             >
                                                 <FileText size={14} />
-                                            </button>
+                                            </button> */}
                                         </td>
                                     </tr>
-                                    {expandedRows.includes(item.id) && (
+                                    {/* {expandedRows.includes(item.id) && (
                                         <tr className="bg-base-100">
                                             <td colSpan="9" className="bg-base-50 p-4">
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -291,7 +312,7 @@ export default function SalesReturnIndex({
                                                 </div>
                                             </td>
                                         </tr>
-                                    )}
+                                    )} */}
                                 </React.Fragment>
                             ))
                         ) : (
@@ -318,7 +339,7 @@ export default function SalesReturnIndex({
                             total: salesReturns.total || 0
                         })}
                     </span>
-                    
+
                     {/* Pagination Links */}
                     {salesReturns.links && salesReturns.links.length > 3 && (
                         <div className="join">

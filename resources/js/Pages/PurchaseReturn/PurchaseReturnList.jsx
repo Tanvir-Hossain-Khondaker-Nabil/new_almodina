@@ -273,12 +273,12 @@ export default function PurchaseReturnList({
             render: (row) => (
                 <div className="font-semibold">
                     ৳{formatCurrency(row.total_return_amount)}
-                    {!isShadowUser && row.shadow_return_amount && (
+                    {/* {!isShadowUser && row.shadow_return_amount && (
                         <div className="text-xs text-warning flex items-center">
                             <Shield size={10} className="mr-1" />
                             ৳{formatCurrency(row.shadow_return_amount)}
                         </div>
-                    )}
+                    )} */}
                 </div>
             )
         },

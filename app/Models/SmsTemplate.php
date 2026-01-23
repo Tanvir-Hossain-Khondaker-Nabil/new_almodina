@@ -7,6 +7,7 @@ use App\Scopes\OutletScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class SmsTemplate extends Model
 {
     use HasFactory, SoftDeletes;
+    use BelongsToTenant;
 
     protected $fillable = [
         'name',

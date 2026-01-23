@@ -6,11 +6,13 @@ use App\Scopes\UserScope;
 use App\Scopes\OutletScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class PurchaseItem extends Model
 {
     use HasFactory;
+    use BelongsToTenant;
 
     protected $fillable = [
         'purchase_id',

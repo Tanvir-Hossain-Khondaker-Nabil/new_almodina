@@ -826,7 +826,7 @@ export default function AddProduct({ category, update, brand, attributes, errors
               </div>
             </label>
 
-            <label
+            {/* <label
               className={`card cursor-pointer border-2 ${productType === "in_house"
                   ? "border-warning bg-warning/5"
                   : "border-base-300 hover:border-warning/50"
@@ -855,7 +855,7 @@ export default function AddProduct({ category, update, brand, attributes, errors
                   </div>
                 </div>
               </div>
-            </label>
+            </label> */}
           </div>
         </div>
 

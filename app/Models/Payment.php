@@ -7,9 +7,11 @@ use App\Scopes\OutletScope;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 
 class Payment extends Model
 {
+    use BelongsToTenant;
     protected $fillable = [
         'sale_id',
         'purchase_id',

@@ -186,7 +186,7 @@ class SalesController extends Controller
             ->orderBy('created_at', 'asc')
             ->get();
 
-        
+
 
         $accounts = Account::where('is_active', true)->get();
         $supplier = Supplier::get();
@@ -210,7 +210,7 @@ class SalesController extends Controller
 
         $customers = Customer::all();
 
-        $stock = Stock::with(['warehouse', 'product.category', 'product','product.brand', 'variant'])
+        $stock = Stock::with(['warehouse', 'product.category', 'product', 'product.brand', 'variant'])
             ->where('quantity', '>', 0)
             ->orderBy('created_at', 'asc')
             ->get();
@@ -541,9 +541,9 @@ class SalesController extends Controller
             DB::rollBack();
             logger()->error('Error creating sale', [
                 'message' => $e->getMessage(),
-                'file'    => $e->getFile(),
-                'line'    => $e->getLine(),
-                'trace'   => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
             ]);
             return back()->withErrors($e->getMessage());
         }
@@ -589,7 +589,8 @@ class SalesController extends Controller
         ];
 
         foreach ($stocks as $stock) {
-            if ($neededBaseQty <= 0) break;
+            if ($neededBaseQty <= 0)
+                break;
 
             $availableBaseQty = $stock->base_quantity ?? $stock->quantity;
             $takeBase = min($availableBaseQty, $neededBaseQty);
@@ -752,34 +753,6 @@ class SalesController extends Controller
             DB::rollBack();
             return back()->withErrors($e->getMessage());
         }
-    }
-
-    private function generateInvoiceNo()
-    {
-        $last = Sale::latest()->first();
-        $num = $last ? intval(substr($last->invoice_no, -4)) + 1 : 1;
-        return 'INV-' . date('Y-m') . '-' . str_pad($num, 4, '0', STR_PAD_LEFT);
-    }
-
-    private function transformToShadowData($sale)
-    {
-        $sale->sub_total = $sale->shadow_sub_total;
-        $sale->discount = $sale->shadow_discount;
-        $sale->vat_tax = $sale->shadow_vat_tax;
-        $sale->grand_total = $sale->shadow_grand_total;
-        $sale->paid_amount = $sale->shadow_paid_amount;
-        $sale->due_amount = $sale->shadow_due_amount;
-
-        if ($sale->items) {
-            $sale->items->transform(function ($item) {
-                $item->unit_price = $item->shadow_unit_price;
-                $item->sale_price = $item->shadow_sale_price;
-                $item->total_price = $item->shadow_total_price;
-                return $item;
-            });
-        }
-
-        return $sale;
     }
 
     public function scanBarcode(Request $request)
@@ -1031,5 +1004,44 @@ class SalesController extends Controller
         return Inertia::render('Sales/Print', [
             'sale' => $sale,
         ]);
+    }
+
+    private function generateInvoiceNo()
+    {
+        return DB::transaction(function () {
+            $prefix = 'INV-' . now()->format('Y-m') . '-';
+
+            $lastInvoice = Sale::where('invoice_no', 'like', $prefix . '%')
+                ->lockForUpdate()
+                ->orderByDesc('invoice_no')
+                ->value('invoice_no');
+
+            $num = $lastInvoice
+                ? (int) substr($lastInvoice, -4) + 1
+                : 1;
+
+            return $prefix . str_pad($num, 4, '0', STR_PAD_LEFT);
+        }, 5);
+    }
+
+    private function transformToShadowData($sale)
+    {
+        $sale->sub_total = $sale->shadow_sub_total;
+        $sale->discount = $sale->shadow_discount;
+        $sale->vat_tax = $sale->shadow_vat_tax;
+        $sale->grand_total = $sale->shadow_grand_total;
+        $sale->paid_amount = $sale->shadow_paid_amount;
+        $sale->due_amount = $sale->shadow_due_amount;
+
+        if ($sale->items) {
+            $sale->items->transform(function ($item) {
+                $item->unit_price = $item->shadow_unit_price;
+                $item->sale_price = $item->shadow_sale_price;
+                $item->total_price = $item->shadow_total_price;
+                return $item;
+            });
+        }
+
+        return $sale;
     }
 }

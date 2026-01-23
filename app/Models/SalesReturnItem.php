@@ -6,9 +6,11 @@ use App\Scopes\UserScope;
 use App\Scopes\OutletScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 
 class SalesReturnItem extends Model
 {
+    use BelongsToTenant;
     protected $fillable = [
         'sales_return_id',
         'sale_item_id',

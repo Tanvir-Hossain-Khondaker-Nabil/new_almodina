@@ -23,6 +23,9 @@ const Users = (props) => (
 const ArrowDown = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m6 9 6 6 6-6" /></svg>
 );
+const Lock = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+);
 
 export default function Index({ roles, filters, pagination }) {
     const { data, setData, get } = useForm({
@@ -70,6 +73,11 @@ export default function Index({ roles, filters, pagination }) {
             preserveState: true,
             preserveScroll: true,
         });
+    };
+
+    // Check if role is protected (Admin or Super Admin)
+    const isProtectedRole = (roleName) => {
+        return ['Admin', 'Super Admin'].includes(roleName);
     };
 
     // Convert roles to array for calculations
@@ -259,97 +267,115 @@ export default function Index({ roles, filters, pagination }) {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 border-t border-gray-200">
-                            {rolesArray.map((role) => (
-                                <tr key={role.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
-                                                    <Shield className="h-5 w-5" />
-                                                </div>
-                                                <div>
-                                                    <div className="font-medium text-gray-900">{role.name}</div>
-                                                    <div className="text-xs text-gray-500">Role ID: {role.id}</div>
+                            {rolesArray.map((role) => {
+                                const isProtected = isProtectedRole(role.name);
+                                
+                                return (
+                                    <tr key={role.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm ${isProtected ? 'bg-gray-600' : 'bg-blue-600'}`}>
+                                                        <Shield className="h-5 w-5 text-white" />
+                                                        {isProtected && (
+                                                            <div className="absolute -top-1 -right-1">
+                                                                <Lock className="h-3 w-3 text-yellow-300" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-medium text-gray-900 flex items-center gap-2">
+                                                            {role.name}
+                                                            {isProtected && (
+                                                                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                                                                    <Lock className="h-2.5 w-2.5" />
+                                                                    Protected
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-xs text-gray-500">Role ID: {role.id}</div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </td>
+                                        </td>
 
-                                    <td className="px-6 py-4">
-                                        <div className="space-y-2">
-                                            <div className="flex flex-wrap gap-1">
-                                                {role.permissions.slice(0, 3).map(permission => (
-                                                    <span
-                                                        key={permission}
-                                                        className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-600/20"
-                                                    >
-                                                        {permission}
-                                                    </span>
-                                                ))}
-                                                {role.permissions.length > 3 && (
-                                                    <span className="inline-flex items-center rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
-                                                        +{role.permissions.length - 3} more
-                                                    </span>
+                                        <td className="px-6 py-4">
+                                            <div className="space-y-2">
+                                                <div className="flex flex-wrap gap-1">
+                                                    {role.permissions.slice(0, 3).map(permission => (
+                                                        <span
+                                                            key={permission}
+                                                            className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-600/20"
+                                                        >
+                                                            {permission}
+                                                        </span>
+                                                    ))}
+                                                    {role.permissions.length > 3 && (
+                                                        <span className="inline-flex items-center rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
+                                                            +{role.permissions.length - 3} more
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {role.permissions_count} permissions assigned
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-lg font-medium text-gray-900">
+                                                    {role.users_count}
+                                                </div>
+                                                <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${role.users_count > 10
+                                                        ? 'bg-green-50 text-green-700 ring-green-600/20'
+                                                        : 'bg-gray-100 text-gray-600 ring-gray-500/10'
+                                                    }`}>
+                                                    {role.users_count > 10 ? 'Popular' : 'Standard'}
+                                                </span>
+                                            </div>
+                                        </td>
+
+                                        <td className="px-6 py-4 text-gray-500">{role.created_at}</td>
+
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                {isProtected ? (
+                                                    <div className="flex items-center text-xs text-gray-400 italic">
+                                                        Read-only
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <Link
+                                                            href={route('roles.edit', role.id)}
+                                                            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                                                            title="Edit"
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
+                                                        </Link>
+                                                        {role.users_count === 0 && (
+                                                            <Link
+                                                                method="delete"
+                                                                href={route('roles.destroy', role.id)}
+                                                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 transition-colors"
+                                                                title="Delete"
+                                                                as="button"
+                                                                onClick={(e) => {
+                                                                    if (!confirm('Are you sure you want to delete this role?')) {
+                                                                        e.preventDefault();
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                                                            </Link>
+                                                        )}
+                                                    </>
                                                 )}
                                             </div>
-                                            <div className="text-xs text-gray-500">
-                                                {role.permissions_count} permissions assigned
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-lg font-medium text-gray-900">
-                                                {role.users_count}
-                                            </div>
-                                            <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${role.users_count > 10
-                                                    ? 'bg-green-50 text-green-700 ring-green-600/20'
-                                                    : 'bg-gray-100 text-gray-600 ring-gray-500/10'
-                                                }`}>
-                                                {role.users_count > 10 ? 'Popular' : 'Standard'}
-                                            </span>
-                                        </div>
-                                    </td>
-
-                                    <td className="px-6 py-4 text-gray-500">{role.created_at}</td>
-
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            {/* <Link
-                                                href={route('roles.show', role.id)}
-                                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                                                title="View Details"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-                                            </Link> */}
-                                            <Link
-                                                href={route('roles.edit', role.id)}
-                                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                                                title="Edit"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
-                                            </Link>
-                                            {role.users_count === 0 && (
-                                                <Link
-                                                    method="delete"
-                                                    href={route('roles.destroy', role.id)}
-                                                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 transition-colors"
-                                                    title="Delete"
-                                                    as="button"
-                                                    onClick={(e) => {
-                                                        if (!confirm('Are you sure you want to delete this role?')) {
-                                                            e.preventDefault();
-                                                        }
-                                                    }}
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
-                                                </Link>
-                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
 

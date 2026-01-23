@@ -4,33 +4,24 @@ namespace App\Http\Controllers;
 
 use App\Models\Outlet;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth ;
+use Illuminate\Support\Facades\Auth;
 
 class OutletController extends Controller
 {
-
-    // index function will be here
     public function index(Request $request)
     {
-        $outlets = Outlet::where('user_id',Auth::id())
-        ->when($request->search, fn($query) =>
-            $query->search($request->search)
-        )
-        ->when($request->status, fn($query) =>
-            $query->where('is_active', $request->status == 'active' ? true : false)
-        )
-        ->get();
-
-       
-
+        // Global scope already filters by ownerId
+        $outlets = Outlet::query()
+            ->when($request->search, fn($q) => $q->search($request->search))
+            ->when($request->status, fn($q) =>
+                $q->where('is_active', $request->status === 'active')
+            )
+            ->get();
 
         return inertia('Outlet/Index', [
             'outlets' => $outlets
         ]);
     }
-
-
-    // store function will be here
 
     public function store(Request $request)
     {
@@ -42,37 +33,27 @@ class OutletController extends Controller
             'is_active' => 'boolean',
         ]);
 
-
-        // Merge the authenticated user ID
         $outlet = Outlet::create(array_merge($validated, [
-            'user_id' => Auth::id(),
             'code' => strtoupper(uniqid('OUT-')),
             'is_main' => false,
             'currency' => 'BDT',
             'timezone' => 'Asia/Dhaka',
-            'created_by' => Auth::id(),
         ]));
 
-
-        return to_route('outlets.index', $outlet)
-                        ->with('success', 'Outlet created successfully!');
+        return to_route('outlets.index')->with('success', 'Outlet created successfully!');
     }
 
-
-    // edit function will be here
     public function edit($id)
     {
+        if (!Auth::user()->canAccessOutlet($id)) abort(403);
         $outlet = Outlet::findOrFail($id);
-        return inertia('Outlet/Edit', [
-            'outlet' => $outlet
-        ]); 
+
+        return inertia('Outlet/Edit', ['outlet' => $outlet]);
     }
-
-
-    // update function will be here
 
     public function update(Request $request, $id)
     {
+        if (!Auth::user()->canAccessOutlet($id)) abort(403);
         $outlet = Outlet::findOrFail($id);
 
         $validated = $request->validate([
@@ -85,93 +66,65 @@ class OutletController extends Controller
 
         $outlet->update($validated);
 
-        return to_route('outlets.index', $outlet)
-                        ->with('success', 'Outlet updated successfully!');
+        return to_route('outlets.index')->with('success', 'Outlet updated successfully!');
     }
-
-
-    // show function will be here
-    public function show($id)
-    {
-        $outlet = Outlet::findOrFail($id);
-        return inertia('Outlet/Show', [
-            'outlet' => $outlet
-        ]);
-    }
-
-
-    // destroy function will be here
 
     public function destroy($id)
     {
+        if (!Auth::user()->canAccessOutlet($id)) abort(403);
+
         $outlet = Outlet::findOrFail($id);
-
-        // Check if the outlet can be deleted
-        // if (!$outlet->canBeDeleted()) {
-        //     return to_route('outlets.index')
-        //                 ->with('error', 'Main outlet cannot be deleted.');
-        // }
-
         $outlet->delete();
 
-        return to_route('outlets.index')
-                        ->with('success', 'Outlet deleted successfully!');
+        return to_route('outlets.index')->with('success', 'Outlet deleted successfully!');
     }
 
     public function login(Request $request, $id)
     {
-        $outlet = Outlet::where('user_id', Auth::id())
-            ->where('id', $id)
-            ->firstOrFail();
+        // 🔐 ensure owner/staff can access
+        if (!Auth::user()->canAccessOutlet($id)) abort(403);
 
-        // User এর current outlet সেট করুন
         Auth::user()->update([
-            'current_outlet_id' => $outlet->id,
+            'current_outlet_id' => $id,
             'outlet_logged_in_at' => now(),
         ]);
+
+        $outlet = Outlet::findOrFail($id);
 
         return redirect()->route('home')
             ->with('success', "{$outlet->name} outlet এ লগইন করা হয়েছে!");
     }
 
-    /**
-     * Outlet থেকে লগআউট করান
-     */
     public function logout(Request $request)
     {
         $currentOutlet = Auth::user()->currentOutlet;
-        
+
         Auth::user()->update([
             'current_outlet_id' => null,
             'outlet_logged_in_at' => null,
         ]);
 
-        return redirect()->route('outlets.index')
-            ->with('success', $currentOutlet 
-                ? "{$currentOutlet->name} outlet থেকে লগআউট করা হয়েছে!" 
-                : 'Outlet থেকে লগআউট করা হয়েছে!'
-            );
+        return redirect()->route('outlets.index')->with(
+            'success',
+            $currentOutlet ? "{$currentOutlet->name} outlet থেকে লগআউট করা হয়েছে!" : 'Outlet থেকে লগআউট করা হয়েছে!'
+        );
     }
 
-    /**
-     * Outlet সুইচ করান
-     */
     public function switchOutlet(Request $request)
     {
         $request->validate([
             'outlet_id' => 'required|exists:outlets,id',
         ]);
 
-        $outlet = Outlet::where('user_id', Auth::id())
-            ->where('id', $request->outlet_id)
-            ->firstOrFail();
+        if (!Auth::user()->canAccessOutlet($request->outlet_id)) abort(403);
 
         Auth::user()->update([
-            'current_outlet_id' => $outlet->id,
+            'current_outlet_id' => $request->outlet_id,
             'outlet_logged_in_at' => now(),
         ]);
 
+        $outlet = Outlet::findOrFail($request->outlet_id);
+
         return back()->with('success', "Outlet পরিবর্তন করা হয়েছে: {$outlet->name}");
     }
-
 }

@@ -2,12 +2,10 @@
 
 namespace App\Models;
 
-use App\Scopes\UserScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Validation\ValidationException;
-
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Auth;
 
 class Outlet extends Model
 {
@@ -34,11 +32,21 @@ class Outlet extends Model
 
     protected static function booted()
     {
-        static::addGlobalScope(new UserScope);
+        static::addGlobalScope('owner_outlets', function ($builder) {
+            if (!Auth::check()) return;
+
+            $builder->where('user_id', Auth::user()->ownerId());
+        });
+
+        static::creating(function ($outlet) {
+            if (!Auth::check()) return;
+
+            $ownerId = Auth::user()->ownerId();
+            $outlet->user_id = $ownerId;
+            $outlet->created_by = $ownerId;
+        });
     }
 
-
-    // Relationships
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -49,17 +57,6 @@ class Outlet extends Model
         return $this->hasMany(User::class, 'current_outlet_id');
     }
 
-    // Scopes
-    public function scopeActive($query)
-    {
-        return $query->where('is_active', true);
-    }
-
-    public function scopeMain($query)
-    {
-        return $query->where('is_main', true);
-    }
-
     public function scopeSearch($query, $search)
     {
         return $query->where('name', 'like', "%{$search}%")
@@ -68,27 +65,8 @@ class Outlet extends Model
             ->orWhere('email', 'like', "%{$search}%");
     }
 
-    // Methods
-    public function makeMain()
-    {
-        self::where('is_main', true)->update(['is_main' => false]);
-
-        $this->update(['is_main' => true]);
-
-        return $this;
-    }
-
     public function canBeDeleted(): bool
     {
         return !$this->is_main;
-    }
-
-    public function getFormattedAddressAttribute(): ?string
-    {
-        if (!$this->address) {
-            return null;
-        }
-
-        return nl2br($this->address);
     }
 }

@@ -12,8 +12,8 @@
     @inertiaHead
 
 
-    {{-- <link rel="stylesheet" href="{{ asset('build/assets/app-CzVf_tT3.css') }}">
-    <script src="{{ asset('build/assets/app-BsxSKPtt.js') }}" type="module"></script> --}}
+    <link rel="stylesheet" href="{{ asset('build/assets/app-Fc6i4B7k.css') }}">
+    <script src="{{ asset('build/assets/app-DsZeJzr1.js') }}" type="module"></script>
 </head>
 
 

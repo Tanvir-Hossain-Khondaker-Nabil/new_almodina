@@ -6,11 +6,13 @@ use App\Scopes\UserScope;
 use App\Scopes\OutletScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Attribute extends Model
 {
+    use BelongsToTenant;
     protected $fillable = ['name', 'code', 'is_active', 'created_by', 'outlet_id'];
 
     protected $hidden = ['created_by'];

@@ -17,8 +17,6 @@ return new class extends Migration
 
             $table->unsignedBigInteger('warehouse_id')->nullable();
             $table->integer('quantity')->default(1);
-            $table->decimal('unit_price', 10, 2)->default(0);
-            $table->decimal('total_price', 10, 2)->default(0);
             $table->unsignedBigInteger('stock_id')->nullable();
 
             $table->enum('status', ['pending', 'completed', 'cancelled'])->default('completed');
@@ -43,11 +41,18 @@ return new class extends Migration
             $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
             $table->unsignedBigInteger('outlet_id');
 
-             $table->foreignId('unit_id')->nullable()->constrained('units');
-            $table->decimal('sale_quantity', 12, 4)->default(1);
-            $table->decimal('base_quantity', 12, 4)->default(1); // Base unit এ রূপান্তরিত পরিমাণ
-            $table->decimal('unit_price', 12, 4)->default(0);
-            $table->decimal('converted_unit_price', 12, 4)->default(0);
+            $table->unsignedBigInteger('unit_id')->nullable();
+            $table->decimal('sale_quantity', 15, 6)->default(1);
+            $table->decimal('base_quantity', 15, 6)->default(1);
+
+            $table->string('unit')->default('piece'); 
+
+            $table->decimal('unit_quantity', 15, 6)->default(1);
+
+            $table->decimal('unit_price', 15, 4)->default(0);
+            $table->decimal('converted_unit_price', 15, 4)->default(0);
+
+            $table->decimal('total_price', 15, 4)->default(0);
 
             $table->softDeletes();
             $table->timestamps();

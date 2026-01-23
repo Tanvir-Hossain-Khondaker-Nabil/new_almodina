@@ -7,10 +7,12 @@ use App\Scopes\UserScope;
 use App\Scopes\OutletScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 
 class SalesReturn extends Model
 {
-     protected $fillable = [
+    use BelongsToTenant;
+    protected $fillable = [
         'sale_id',
         'customer_id',
         'refunded_amount',
@@ -32,20 +34,20 @@ class SalesReturn extends Model
     {
         static::addGlobalScope(new UserScope);
         static::addGlobalScope(new OutletScope);
-        
+
         // Automatically set outlet_id and created_by when creating
         static::creating(function ($attribute) {
             if (Auth::check()) {
                 $user = Auth::user();
                 $attribute->created_by = $user->id;
-                
+
                 // Get current outlet ID from user
                 if ($user->current_outlet_id) {
                     $attribute->outlet_id = $user->current_outlet_id;
                 }
             }
         });
-        
+
         // Prevent updating outlet_id once set
         static::updating(function ($attribute) {
             $originalOutletId = $attribute->getOriginal('outlet_id');
@@ -62,11 +64,6 @@ class SalesReturn extends Model
         return $this->belongsTo(Sale::class, 'sale_id')->with(['warehouse', 'items']);
     }
 
-    public function items()
-    {
-        return $this->hasMany(SalesReturnItem::class, 'sales_return_id');
-    }
-
     //relation to customer
     public function customer()
     {
@@ -77,7 +74,8 @@ class SalesReturn extends Model
     //scope for searching by invoice number
     public function scopeSearchByInvoice($query, $search)
     {
-        if (!$search) return $query;
+        if (!$search)
+            return $query;
 
         return $query->whereHas('sale', function ($q) use ($search) {
             $q->where('invoice_no', 'like', "%{$search}%");
@@ -87,7 +85,8 @@ class SalesReturn extends Model
 
     public function scopeSearchByCustomer($query, $search)
     {
-        if (!$search) return $query;
+        if (!$search)
+            return $query;
 
         return $query->whereHas('customer', function ($q) use ($search) {
             $q->where('customer_name', 'like', "%{$search}%")
@@ -97,7 +96,8 @@ class SalesReturn extends Model
 
     public function scopeSearch($query, $search)
     {
-        if (!$search) return $query;
+        if (!$search)
+            return $query;
 
         return $query->where(function ($q) use ($search) {
             $q->searchByInvoice($search)
@@ -109,7 +109,8 @@ class SalesReturn extends Model
 
     public function scopeStatus($query, $status)
     {
-        if (!$status) return $query;
+        if (!$status)
+            return $query;
 
         return $query->where('status', $status);
     }
@@ -117,7 +118,8 @@ class SalesReturn extends Model
 
     public function scopeDateBetween($query, $from, $to)
     {
-        if (!$from || !$to) return $query;
+        if (!$from || !$to)
+            return $query;
 
         return $query->whereBetween('created_at', [
             Carbon::parse($from)->startOfDay(),
@@ -128,8 +130,14 @@ class SalesReturn extends Model
 
     public function scopeType($query, $type)
     {
-        if (!$type) return $query;
+        if (!$type)
+            return $query;
 
         return $query->where('type', $type);
+    }
+
+    public function items()
+    {
+        return $this->hasMany(SalesReturnItem::class, 'sales_return_id')->with(['product', 'variant','saleItem']);
     }
 }

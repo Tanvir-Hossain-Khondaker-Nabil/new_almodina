@@ -7,9 +7,11 @@ use App\Scopes\UserScope;
 use App\Scopes\OutletScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 
 class DillerShip extends Model
 {
+    use BelongsToTenant;
     
     protected $fillable = [
         'company_id', 'name', 'owner_name', 'email', 'phone', 'address',

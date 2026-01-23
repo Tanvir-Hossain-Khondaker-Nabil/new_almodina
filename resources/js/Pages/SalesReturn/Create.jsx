@@ -15,9 +15,7 @@ export default function AddSalesReturn({
     sale,
     saleItems,
     sales,
-    customers,
     products,
-    accounts,
     unitConversions = {
         weight: { ton: 1000, kg: 1, gram: 0.001, pound: 0.453592 },
         volume: { liter: 1, ml: 0.001 },
@@ -48,12 +46,9 @@ export default function AddSalesReturn({
         return_date: new Date().toISOString().split('T')[0],
         reason: "",
         notes: "",
-        payment_type: 'cash',
         refunded_amount: 0,
         shadow_refunded_amount: 0,
         items: [],
-        replacement_products: [],
-        account_id: "",
         auto_approve: true
     });
 
@@ -73,31 +68,31 @@ export default function AddSalesReturn({
 
     const getAvailableUnits = useCallback((product) => {
         if (!product) return ['piece'];
-        
+
         const unitType = product.unit_type || 'piece';
         const conversions = unitConversions[unitType];
-        
+
         if (!conversions) return [product.default_unit || 'piece'];
-        
+
         const purchaseUnit = product.default_unit || 'piece';
         const purchaseFactor = conversions[purchaseUnit] || 1;
-        
+
         const available = [];
         for (const [unit, factor] of Object.entries(conversions)) {
             if (factor <= purchaseFactor) {
                 available.push(unit);
             }
         }
-        
+
         return available.sort((a, b) => (conversions[a] || 1) - (conversions[b] || 1));
     }, [unitConversions]);
 
     const convertUnitQuantity = useCallback((quantity, fromUnit, toUnit, unitType) => {
         if (fromUnit === toUnit) return quantity;
-        
+
         const conversions = unitConversions[unitType];
         if (!conversions || !conversions[fromUnit] || !conversions[toUnit]) return quantity;
-        
+
         const baseQuantity = quantity * conversions[fromUnit];
         return baseQuantity / conversions[toUnit];
     }, [unitConversions]);
@@ -161,7 +156,6 @@ export default function AddSalesReturn({
     // ফর্ম ডেটা সিঙ্ক
     useEffect(() => {
         const totalReturn = calculateTotalReturn();
-        const replacementTotal = calculateReplacementTotal();
         const netDifference = calculateNetDifference();
 
         const itemsToSubmit = selectedItems
@@ -173,29 +167,13 @@ export default function AddSalesReturn({
                 reason: item.reason || 'Return requested'
             }));
 
-        const replacementToSubmit = returnType === 'product_replacement' 
-            ? replacementProducts.map(product => ({
-                product_id: product.product_id,
-                variant_id: product.variant_id,
-                quantity: parseFloat(product.quantity),
-                unit: product.unit,
-                unit_price: parseFloat(product.unit_price) || 0,
-                shadow_unit_price: parseFloat(product.shadow_unit_price) || 0,
-                sale_price: parseFloat(product.sale_price) || 0,
-                shadow_sale_price: parseFloat(product.shadow_sale_price) || 0
-            }))
-            : [];
-
         form.setData({
             ...form.data,
             sale_id: selectedSaleId,
             return_type: returnType,
             refunded_amount: returnType === 'money_back' ? totalReturn : 0,
             shadow_refunded_amount: returnType === 'money_back' ? totalReturn : 0,
-            payment_type: returnType === 'money_back' ? paymentType : null,
-            account_id: selectedAccount,
             items: itemsToSubmit,
-            replacement_products: replacementToSubmit
         });
     }, [
         selectedSaleId,
@@ -203,7 +181,6 @@ export default function AddSalesReturn({
         paymentType,
         selectedAccount,
         selectedItems,
-        replacementProducts,
         calculateTotalReturn,
         calculateNetDifference
     ]);
@@ -259,32 +236,32 @@ export default function AddSalesReturn({
 
         if (field === 'return_quantity') {
             const quantity = parseFloat(value) || 0;
-            
+
             // ফ্র্যাকশন চেক
             if (!item.is_fraction_allowed && quantity % 1 !== 0) {
                 toast.error('Fractions are not allowed for this product');
                 return;
             }
-            
+
             // ম্যাক্সিমাম চেক
             if (quantity > item.max_quantity) {
                 toast.error(`Cannot return more than ${item.max_quantity} ${item.unit}`);
                 return;
             }
-            
+
             updated[index].return_quantity = quantity;
-        } 
+        }
         else if (field === 'unit') {
             // ইউনিট চেঞ্জ ভ্যালিডেশন
             if (!item.available_units.includes(value)) {
                 toast.error(`Cannot return in ${value.toUpperCase()} unit for this product`);
                 return;
             }
-            
+
             // কনভার্ট কোয়ান্টিটি
             const oldUnit = item.unit;
             const newUnit = value;
-            
+
             if (oldUnit !== newUnit && item.return_quantity > 0) {
                 const convertedQuantity = convertUnitQuantity(
                     item.return_quantity,
@@ -292,19 +269,19 @@ export default function AddSalesReturn({
                     newUnit,
                     item.unit_type || 'piece'
                 );
-                
+
                 // স্টক চেক নতুন ইউনিটে
                 const baseStock = item.base_stock_quantity;
                 const requestedBase = convertToBase(convertedQuantity, newUnit, item.unit_type || 'piece');
-                
+
                 if (requestedBase > baseStock) {
                     toast.error('Exceeds available stock in new unit');
                     return;
                 }
-                
+
                 updated[index].return_quantity = convertedQuantity;
             }
-            
+
             updated[index].unit = value;
         }
         else {
@@ -318,7 +295,7 @@ export default function AddSalesReturn({
     const addReplacementProduct = (product, variant) => {
         const availableUnits = getAvailableUnits(product);
         const defaultUnit = product.default_unit || availableUnits[0] || 'piece';
-        
+
         const existing = replacementProducts.find(
             p => p.product_id === product.id && p.variant_id === variant.id
         );
@@ -330,7 +307,7 @@ export default function AddSalesReturn({
                     : p
             ));
         } else {
-            const variantName = variant.attribute_values 
+            const variantName = variant.attribute_values
                 ? Object.values(variant.attribute_values).join(', ')
                 : 'Default Variant';
 
@@ -367,14 +344,14 @@ export default function AddSalesReturn({
 
         if (field === 'quantity' || field === 'unit_price' || field === 'sale_price') {
             const numValue = parseFloat(value) || 0;
-            
+
             if (field === 'quantity' && !item.is_fraction_allowed && numValue % 1 !== 0) {
                 toast.error('Fractions are not allowed for this product');
                 return;
             }
-            
+
             updated[index][field] = numValue;
-        } 
+        }
         else if (field === 'unit') {
             if (!item.available_units.includes(value)) {
                 toast.error(`Invalid unit ${value.toUpperCase()} for this product`);
@@ -427,17 +404,8 @@ export default function AddSalesReturn({
             }
         });
 
-        if (returnType === 'product_replacement') {
-            if (replacementProducts.length === 0) {
-                errors.replacement = 'Please add replacement products';
-            }
-        }
 
-        if (returnType === 'money_back' && form.data.refunded_amount > 0) {
-            if (!selectedAccount) {
-                errors.account = 'Please select a payment account for refund';
-            }
-        }
+
 
         setValidationErrors(errors);
         return Object.keys(errors).length === 0;
@@ -574,8 +542,8 @@ export default function AddSalesReturn({
                                 </label>
                                 <div className="grid grid-cols-2 gap-2">
                                     <label className={`card card-compact cursor-pointer ${returnType === 'money_back'
-                                            ? 'bg-[#1e4d2b] text-white border border-primary'
-                                            : 'bg-base-100 border border-base-300'
+                                        ? 'bg-[#1e4d2b] text-white border border-primary'
+                                        : 'bg-base-100 border border-base-300'
                                         }`}>
                                         <div className="card-body p-3">
                                             <input
@@ -594,8 +562,8 @@ export default function AddSalesReturn({
                                         </div>
                                     </label>
                                     <label className={`card card-compact cursor-pointer ${returnType === 'product_replacement'
-                                            ? 'bg-warning/10 border border-warning'
-                                            : 'bg-base-100 border border-base-300'
+                                        ? 'bg-warning/10 border border-warning'
+                                        : 'bg-base-100 border border-base-300'
                                         }`}>
                                         <div className="card-body p-3">
                                             <input
@@ -629,74 +597,7 @@ export default function AddSalesReturn({
                                 />
                             </div>
 
-                            <div className="form-control">
-                                <label className="label cursor-pointer">
-                                    <span className="label-text font-semibold text-primary">
-                                        {t('sales_return.damaged_product', 'Damaged Product')}
-                                    </span>
-                                    <input
-                                        type="checkbox"
-                                        className="checkbox checkbox-primary"
-                                        checked={form.data.is_damaged}
-                                        onChange={(e) => form.setData("is_damaged", e.target.checked)}
-                                    />
-                                </label>
-                                <div className="text-xs text-gray-500 mt-1">
-                                    Check if products are damaged/warranty return
-                                </div>
-                            </div>
 
-                            {returnType === 'money_back' && (
-                                <div className="space-y-4">
-                                    {/* <div className="form-control">
-                                        <label className="label">
-                                            <span className="label-text font-semibold">{t('sales_return.payment_type', 'Payment Type')} *</span>
-                                        </label>
-                                        <select
-                                            className="select select-bordered w-full"
-                                            value={paymentType}
-                                            onChange={(e) => setPaymentType(e.target.value)}
-                                        >
-                                            <option value="cash">Cash</option>
-                                            <option value="card">Card</option>
-                                            <option value="mobile_banking">Mobile Banking</option>
-                                            <option value="adjust_to_due">Adjust to Customer Due</option>
-                                        </select>
-                                    </div> */}
-
-                                    {paymentType !== 'adjust_to_due' && (
-                                        <div className="form-control">
-                                            <label className="label">
-                                                <span className="label-text font-semibold">{t('sales_return.payment_account', 'Payment Account')} *</span>
-                                            </label>
-                                            <select
-                                                className="select select-bordered w-full"
-                                                value={selectedAccount}
-                                                onChange={(e) => setSelectedAccount(e.target.value)}
-                                                required={totalReturn > 0}
-                                            >
-                                                <option value="">Select Account</option>
-                                                {accounts?.map(account => (
-                                                    <option key={account.id} value={account.id}>
-                                                        <div className="flex items-center gap-2">
-                                                            {account.type === 'cash' && <Wallet size={14} className="text-green-600" />}
-                                                            {account.type === 'bank' && <Building size={14} className="text-blue-600" />}
-                                                            {account.type === 'mobile_banking' && <CreditCard size={14} className="text-purple-600" />}
-                                                            <span>{account.name}</span>
-                                                            <span className="ml-auto text-xs">
-                                                                ৳{formatCurrency(account.current_balance)}
-                                                            </span>
-                                                        </div>
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            {validationErrors.account && (
-                                                <div className="text-error text-xs mt-1">{validationErrors.account}</div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
 
                             <div className="form-control">
                                 <label className="label">
@@ -708,7 +609,7 @@ export default function AddSalesReturn({
                                     value={form.data.reason}
                                     onChange={(e) => form.setData("reason", e.target.value)}
                                     placeholder="Explain why customer is returning these items..."
-                                    // required
+                                // required
                                 />
                                 {validationErrors.reason && (
                                     <div className="text-error text-xs mt-1">{validationErrors.reason}</div>
@@ -754,7 +655,7 @@ export default function AddSalesReturn({
                                                                     <strong>Brand:</strong> {item.brand_name}
                                                                 </div>
                                                                 <div className="text-xs text-gray-500">
-                                                                    Sold: {item.sale_quantity} {item.unit} • 
+                                                                    Sold: {item.sale_quantity} {item.unit} •
                                                                     Available for return: {item.max_quantity} {item.unit}
                                                                 </div>
                                                             </div>
@@ -887,210 +788,6 @@ export default function AddSalesReturn({
                                 </div>
                             </div>
 
-                            {/* রিপ্লেসমেন্ট প্রোডাক্টস */}
-                            {returnType === 'product_replacement' && (
-                                <div>
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="font-semibold text-lg flex items-center gap-2">
-                                            <Package size={20} />
-                                            Replacement Products
-                                            <span className="badge badge-warning badge-sm">
-                                                {replacementProducts.length}
-                                            </span>
-                                        </h3>
-                                        <button
-                                            type="button"
-                                            className="btn btn-sm btn-outline btn-warning"
-                                            onClick={() => setShowReplacementSearch(!showReplacementSearch)}
-                                        >
-                                            <Plus size={14} />
-                                            Add Replacement
-                                        </button>
-                                    </div>
-
-                                    {/* প্রোডাক্ট সার্চ */}
-                                    {showReplacementSearch && (
-                                        <div className="mb-4 relative" ref={searchRef}>
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    className="input input-bordered w-full pr-10"
-                                                    value={productSearch}
-                                                    onChange={(e) => setProductSearch(e.target.value)}
-                                                    placeholder="Search products..."
-                                                    autoFocus
-                                                />
-                                                <Search size={16} className="absolute right-3 top-3 text-gray-400" />
-                                            </div>
-
-                                            {productSearch.trim() && filteredProducts.length > 0 && (
-                                                <div
-                                                    ref={dropdownRef}
-                                                    className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-96 overflow-y-auto"
-                                                >
-                                                    {filteredProducts.map(product => (
-                                                        <div key={product.id} className="border-b last:border-b-0">
-                                                            <div className="p-3 font-medium bg-base-200">
-                                                                <div className="flex justify-between">
-                                                                    <span>{product.name}</span>
-                                                                    <span className="text-xs text-gray-500">
-                                                                        {product.product_no}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                            {product.variants?.map(variant => (
-                                                                <div
-                                                                    key={variant.id}
-                                                                    className="p-3 hover:bg-base-100 cursor-pointer border-b last:border-b-0"
-                                                                    onClick={() => addReplacementProduct(product, variant)}
-                                                                >
-                                                                    <div className="flex justify-between items-center">
-                                                                        <div>
-                                                                            <div className="font-medium">
-                                                                                {variant.attribute_values 
-                                                                                    ? Object.values(variant.attribute_values).join(', ')
-                                                                                    : 'Default Variant'}
-                                                                            </div>
-                                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                                Price: ৳{formatCurrency(variant.sale_price || variant.unit_cost || 0)}
-                                                                            </div>
-                                                                        </div>
-                                                                        <Plus size={16} className="text-warning" />
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* রিপ্লেসমেন্ট লিস্ট */}
-                                    {replacementProducts.length > 0 ? (
-                                        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
-                                            {replacementProducts.map((product, index) => (
-                                                <div key={index} className="card card-compact bg-warning/5 border border-warning/20">
-                                                    <div className="card-body">
-                                                        <div className="flex justify-between items-start mb-2">
-                                                            <div className="flex-1">
-                                                                <h4 className="font-medium text-base">{product.product_name}</h4>
-                                                                <div className="text-sm text-gray-600 space-y-1">
-                                                                    <div>
-                                                                        <strong>Variant:</strong> {product.variant_name}
-                                                                    </div>
-                                                                    <div>
-                                                                        <strong>Brand:</strong> {product.brand_name}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <button
-                                                                type="button"
-                                                                className="btn btn-xs btn-error btn-outline"
-                                                                onClick={() => removeReplacementProduct(index)}
-                                                            >
-                                                                <Trash2 size={12} />
-                                                            </button>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                                                            <div className="form-control">
-                                                                <label className="label py-1">
-                                                                    <span className="label-text text-xs font-semibold">Quantity</span>
-                                                                </label>
-                                                                <input
-                                                                    type="number"
-                                                                    step={product.is_fraction_allowed ? "0.001" : "1"}
-                                                                    min="0.001"
-                                                                    className="input input-bordered input-sm w-full border-warning"
-                                                                    value={product.quantity}
-                                                                    onChange={(e) => updateReplacementProduct(index, 'quantity', e.target.value)}
-                                                                />
-                                                            </div>
-
-                                                            <div className="form-control">
-                                                                <label className="label py-1">
-                                                                    <span className="label-text text-xs font-semibold">Unit</span>
-                                                                </label>
-                                                                <select
-                                                                    className="select select-bordered select-sm w-full border-warning"
-                                                                    value={product.unit}
-                                                                    onChange={(e) => updateReplacementProduct(index, 'unit', e.target.value)}
-                                                                >
-                                                                    {product.available_units?.map(unit => (
-                                                                        <option key={unit} value={unit}>
-                                                                            {unit.toUpperCase()}
-                                                                        </option>
-                                                                    ))}
-                                                                </select>
-                                                            </div>
-
-                                                            <div className="form-control">
-                                                                <label className="label py-1">
-                                                                    <span className="label-text text-xs font-semibold">Unit Price</span>
-                                                                </label>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    className="input input-bordered input-sm w-full border-warning"
-                                                                    value={product.unit_price}
-                                                                    onChange={(e) => updateReplacementProduct(index, 'unit_price', e.target.value)}
-                                                                />
-                                                            </div>
-
-                                                            <div className="form-control">
-                                                                <label className="label py-1">
-                                                                    <span className="label-text text-xs font-semibold">Sale Price</span>
-                                                                </label>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    className="input input-bordered input-sm w-full border-warning"
-                                                                    value={product.sale_price}
-                                                                    onChange={(e) => updateReplacementProduct(index, 'sale_price', e.target.value)}
-                                                                />
-                                                            </div>
-
-                                                            <div className="form-control">
-                                                                <label className="label py-1">
-                                                                    <span className="label-text text-xs font-semibold">Total</span>
-                                                                </label>
-                                                                <input
-                                                                    type="text"
-                                                                    className="input input-bordered input-sm w-full bg-warning/10 font-semibold"
-                                                                    value={`৳${formatCurrency(product.quantity * product.sale_price)}`}
-                                                                    readOnly
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="card card-compact bg-warning/5 border-2 border-dashed border-warning/30">
-                                            <div className="card-body text-center py-8">
-                                                <Package size={32} className="mx-auto text-warning/50 mb-2" />
-                                                <p className="text-gray-500">No replacement products added</p>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="mt-4 p-3 bg-warning/5 border border-warning/20 rounded-box">
-                                        <div className="flex justify-between items-center">
-                                            <div>
-                                                <span className="font-medium">Total Replacement Value:</span>
-                                                <p className="text-sm text-gray-500 mt-1">
-                                                    Items: {replacementProducts.length}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="font-semibold text-lg text-warning">৳{formatCurrency(replacementTotal)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     </div>
 
@@ -1156,8 +853,8 @@ export default function AddSalesReturn({
                                                 <span>Net Difference:</span>
                                                 <span className={`${netDifference > 0 ? 'text-error' : netDifference < 0 ? 'text-success' : 'text-gray-600'}`}>
                                                     ৳{formatCurrency(Math.abs(netDifference))}
-                                                    {netDifference > 0 ? ' (Customer Pays More)' : 
-                                                     netDifference < 0 ? ' (We Refund Difference)' : ' (Equal)'}
+                                                    {netDifference > 0 ? ' (Customer Pays More)' :
+                                                        netDifference < 0 ? ' (We Refund Difference)' : ' (Equal)'}
                                                 </span>
                                             </div>
                                         </div>

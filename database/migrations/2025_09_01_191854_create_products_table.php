@@ -13,7 +13,8 @@ return new class extends Migration {
         Schema::create('products', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->string('product_no')->nullable();
+            $table->string('photo')->nullable();   
+            $table->string('product_no')->nullable();            
             $table->unsignedBigInteger('category_id');
             $table->text('description')->nullable();
 
@@ -27,9 +28,11 @@ return new class extends Migration {
             $table->unsignedBigInteger('brand_id')->nullable();
             $table->unsignedBigInteger('outlet_id');
 
-            $table->foreignId('unit_id')->nullable()->constrained('units');
-            $table->boolean('has_variable_units')->default(false);
-            $table->decimal('minimum_sale_quantity', 12, 4)->default(0.001);
+            $table->unsignedBigInteger('unit_id')->nullable();
+            $table->string('unit_type')->default('piece'); 
+            $table->string('default_unit')->default('piece'); 
+            $table->boolean('is_fraction_allowed')->default(false);
+            $table->string('min_sale_unit')->nullable();
             $table->timestamps();
         });
 

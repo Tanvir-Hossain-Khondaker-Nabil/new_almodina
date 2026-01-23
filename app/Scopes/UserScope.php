@@ -13,6 +13,8 @@ class UserScope implements Scope
     {
         if (!Auth::check()) return;
 
-        $builder->where($model->qualifyColumn('created_by'), Auth::id());
+        $ownerId = Auth::user()->ownerId();
+
+        $builder->where($model->qualifyColumn('created_by'), $ownerId);
     }
 }

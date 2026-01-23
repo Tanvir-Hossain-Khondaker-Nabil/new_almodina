@@ -6,12 +6,14 @@ use App\Scopes\UserScope;
 use App\Scopes\OutletScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Variant extends Model
 {
+    use BelongsToTenant;
     protected $fillable = ['product_id', 'attribute_values', 'sku', 'outlet_id', 'created_by'];
 
     protected $casts = [

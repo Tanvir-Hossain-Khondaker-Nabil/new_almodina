@@ -19,8 +19,6 @@ return new class extends Migration {
             $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
             $table->unsignedBigInteger('outlet_id');
 
-             $table->decimal('base_quantity', 12, 4)->default(1); // Base unit এ পরিমাণ
-    $table->foreignId('unit_id')->nullable()->constrained('units');
             $table->timestamps();
         });
     }

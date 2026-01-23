@@ -57,11 +57,11 @@ Route::middleware('guest')->controller(AuthController::class)->group(function ()
 
 
 
-
+ 
 // auth routes
 Route::middleware('auth')->group(function () {
 
-    Route::get('/dashboard/{s?}', [DashboardController::class, 'index'])->middleware('permission:dashboard.view')->name('home');
+    Route::get('/dashboard/{s?}', [DashboardController::class, 'index'])->name('home');
 
 
     // user deposit route will be here
@@ -595,18 +595,44 @@ Route::middleware('auth')->group(function () {
             ->name('destroy');
     });
 
-    Route::get('/sms-test', function () {
+        Route::get('/sms-test', function () {
         return Inertia::render('Sms/Test');
-    })->name('sms.test.page');
-
-    // API রাউট (পূর্বে যোগ করা)
-    Route::post('/sms/test', [SupplierController::class, 'sendTestSms'])->name('sms.test');
-    Route::post('/sms/preview', [SupplierController::class, 'getSmsPreview'])->name('sms.preview');
-
-
-    Route::resource('sms-templates', SmsTemplateController::class);
-    Route::post('/sms-templates/{smsTemplate}/toggle-status', [SmsTemplateController::class, 'toggleStatus'])
-        ->name('sms-templates.toggle-status');
+    })->name('sms.test.page')->middleware('permission:sms_templates.view');
+    
+    // API Routes
+    Route::middleware('permission:sms_templates.view')->group(function () {
+        Route::post('/sms/test', [SupplierController::class, 'sendTestSms'])->name('sms.test');
+        Route::post('/sms/preview', [SupplierController::class, 'getSmsPreview'])->name('sms.preview');
+    });
+    
+    // SMS Templates Resource Routes with individual permissions
+    Route::middleware('permission:sms_templates.view')->group(function () {
+        Route::resource('sms-templates', SmsTemplateController::class)->except([
+            'create', 'store', 'edit', 'update', 'destroy'
+        ]);
+    });
+    
+    // Additional SMS Template routes with specific permissions
+    Route::middleware('permission:sms_templates.create')->group(function () {
+        Route::get('/sms-templates/create', [SmsTemplateController::class, 'create'])->name('sms-templates.create');
+        Route::post('/sms-templates', [SmsTemplateController::class, 'store'])->name('sms-templates.store');
+    });
+    
+    Route::middleware('permission:sms_templates.edit')->group(function () {
+        Route::get('/sms-templates/{smsTemplate}/edit', [SmsTemplateController::class, 'edit'])->name('sms-templates.edit');
+        Route::put('/sms-templates/{smsTemplate}', [SmsTemplateController::class, 'update'])->name('sms-templates.update');
+        Route::post('/sms-templates/{smsTemplate}/toggle-status', [SmsTemplateController::class, 'toggleStatus'])
+            ->name('sms-templates.toggle-status');
+    });
+    
+    Route::middleware('permission:sms_templates.delete')->group(function () {
+        Route::delete('/sms-templates/{smsTemplate}', [SmsTemplateController::class, 'destroy'])->name('sms-templates.destroy');
+    });
+    
+    // Show route (already included in resource but needs permission)
+    Route::get('/sms-templates/{smsTemplate}', [SmsTemplateController::class, 'show'])
+        ->name('sms-templates.show')
+        ->middleware('permission:sms_templates.show');
 
     Route::get('/products/{product}/barcodes', [ProductController::class, 'showBarcodes'])
         ->name('product.barcodes.show');
@@ -622,6 +648,10 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/api/products/{product}/barcode-data', [ProductController::class, 'getBarcodeData'])
         ->name('product.barcode-data');
+
+    Route::post('/return/approved/{id}', [SalesReturnController::class, 'approve'])
+        // ->middleware('permission:sales_return.approve')
+        ->name('return.approve');
 
 });
 

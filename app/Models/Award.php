@@ -7,11 +7,13 @@ use App\Scopes\UserScope;
 use App\Scopes\OutletScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Award extends Model
 {
     use HasFactory;
+    use BelongsToTenant;
 
     protected $fillable = [
         'title',

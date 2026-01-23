@@ -84,6 +84,10 @@ const baseMenu = [
 
   // { title: "Dealerships", icon: "box", route: "dealerships.index", routeParams: null, active: "dealerships.index", role: "all", category: "Partners" },
 
+  { title: "Users", icon: "user", route: "userlist.view", routeParams: null, active: "userlist.view", role: "all", category: "Admin" },
+  { title: "Roles", icon: "user", route: "roles.index", routeParams: null, active: "roles.index", role: "all", category: "Admin" },
+
+
   { title: "Customer", icon: "user-plus", route: "customer.index", routeParams: null, active: "customer.index", role: "all", category: "CRM" },
   { title: "Companies", icon: "user-plus", route: "companies.index", routeParams: null, active: "companies.index", role: "all", category: "CRM" },
 
@@ -216,6 +220,8 @@ export default function Sidebar({ status, setStatus }) {
       "Purchase Return": t("auth.purchase_return", "Purchase Return"),
       "Add Purchase Return": t("auth.add_purchase_return", "Add Purchase Return"),
       "All Purchase Items": t("auth.all_purchase_items", "All Purchase Items"),
+
+      Users: t("auth.users", "Users"),
 
       Warehouse: t("auth.warehouse", "Warehouse"),
       Supplier: t("auth.supplier", "Supplier"),

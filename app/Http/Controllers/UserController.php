@@ -20,6 +20,9 @@ class UserController extends Controller
     {
         $query = User::query()
             ->with(['roles', 'business'])
+            ->whereHas('roles', function ($q) {
+                $q->where('name', '!=', 'Super Admin'); // Exclude Super Admin users
+            })
             ->where('id', '!=', Auth::id()) // Exclude current user
             ->latest();
 
@@ -27,8 +30,8 @@ class UserController extends Controller
         if ($request->has('search') && $request->search) {
             $query->where(function ($q) use ($request) {
                 $q->where('name', 'like', '%' . $request->search . '%')
-                  ->orWhere('email', 'like', '%' . $request->search . '%')
-                  ->orWhere('phone', 'like', '%' . $request->search . '%');
+                    ->orWhere('email', 'like', '%' . $request->search . '%')
+                    ->orWhere('phone', 'like', '%' . $request->search . '%');
             });
         }
 
@@ -39,8 +42,31 @@ class UserController extends Controller
             });
         }
 
-        // Get all roles for filter dropdown
+        // Get all roles for filter dropdown (excluding Super Admin)
         $allRoles = Role::where('name', '!=', 'Super Admin')->get()->pluck('name');
+
+        // Calculate statistics
+        $totalUsers = User::whereHas('roles', function ($q) {
+            $q->where('name', '!=', 'Super Admin');
+        })->count();
+        
+        $adminsCount = User::whereHas('roles', function ($q) {
+            $q->where('name', 'admin');
+        })->count();
+        
+        // Check if 'seller' role exists before counting
+        $sellersCount = 0;
+        if (Role::where('name', 'seller')->exists()) {
+            $sellersCount = User::whereHas('roles', function ($q) {
+                $q->where('name', 'seller');
+            })->count();
+        }
+        
+        // Remove is_active filter since the column doesn't exist
+        // All users are considered active by default
+        $activeUsers = User::whereHas('roles', function ($q) {
+            $q->where('name', '!=', 'Super Admin');
+        })->count();
 
         return Inertia::render('Users/Index', [
             'filters' => $request->only(['search', 'role']),
@@ -59,10 +85,57 @@ class UserController extends Controller
                 ]),
             'roles' => $allRoles,
             'statistics' => [
-                'total_users' => User::count(),
-                'admins_count' => User::role('admin')->count(),
+                'total_users' => $totalUsers,
+                'admins_count' => $adminsCount,
+                'sellers_count' => $sellersCount,
+                'active_users' => $activeUsers,
             ]
         ]);
+    }
+
+    /**
+     * Show create form
+     */
+    public function create()
+    {
+        return Inertia::render('Users/Create', [
+            'user' => null,
+            'roles' => Role::where('name', '!=', 'Super Admin')->get()->pluck('name'),
+            'isEdit' => false,
+        ]);
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit($id)
+    {
+        try {
+            $user = User::with('roles')->findOrFail($id);
+
+            // Prevent editing super admin users
+            if ($user->hasRole('Super Admin') && !Auth::user()->hasRole('Super Admin')) {
+                return redirect()->route('userlist.view')
+                    ->with('error', 'Cannot edit Super Admin user.');
+            }
+
+            return Inertia::render('Users/Create', [
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'address' => $user->address,
+                    'roles' => $user->roles->pluck('name'),
+                ],
+                'roles' => Role::where('name', '!=', 'Super Admin')->get()->pluck('name'),
+                'isEdit' => true,
+            ]);
+
+        } catch (\Exception $e) {
+            return redirect()->route('userlist.view')
+                ->with('error', 'User not found.');
+        }
     }
 
     /**
@@ -80,64 +153,35 @@ class UserController extends Controller
             'roles.*' => 'exists:roles,name',
         ]);
 
+        DB::beginTransaction();
         try {
-            DB::beginTransaction();
+            $auth = Auth::user();
+            $ownerId = $auth->ownerId();
 
-            // Create user
+            if (!$auth->current_outlet_id) {
+                return back()->with('error', 'Please login to an outlet first.')->withInput();
+            }
+
             $user = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'phone' => $request->phone,
                 'address' => $request->address,
                 'password' => Hash::make($request->password),
+                // ✅ staff binds to owner + current outlet
+                'parent_id' => $ownerId,
+                'current_outlet_id' => $auth->current_outlet_id,
+                'type' => 'general',
             ]);
 
-            // Assign roles
             $user->syncRoles($request->roles);
 
             DB::commit();
-
-            return redirect()->route('userlist.view')
-                ->with('success', 'User created successfully.');
+            return redirect()->route('userlist.view')->with('success', 'User created successfully.');
 
         } catch (\Exception $e) {
             DB::rollBack();
-            
-            return redirect()->back()
-                ->with('error', 'Failed to create user: ' . $e->getMessage())
-                ->withInput();
-        }
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        try {
-            $user = User::with('roles')->findOrFail($id);
-
-            // Prevent editing super admin users
-            if ($user->hasRole('Super Admin') && !Auth::user()->hasRole('Super Admin')) {
-                return redirect()->route('userlist.view')
-                    ->with('error', 'Cannot edit Super Admin user.');
-            }
-
-            return Inertia::render('Users/Edit', [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone,
-                    'address' => $user->address,
-                    'roles' => $user->roles->pluck('name'),
-                ],
-                'roles' => Role::where('name', '!=', 'Super Admin')->get()->pluck('name'),
-            ]);
-
-        } catch (\Exception $e) {
-            return redirect()->route('userlist.view')
-                ->with('error', 'User not found.');
+            return back()->with('error', 'Failed: ' . $e->getMessage())->withInput();
         }
     }
 
@@ -168,19 +212,19 @@ class UserController extends Controller
             DB::beginTransaction();
 
             // Update user
-            $user->update([
+            $updateData = [
                 'name' => $request->name,
                 'email' => $request->email,
                 'phone' => $request->phone,
                 'address' => $request->address,
-            ]);
+            ];
 
             // Update password if provided
             if ($request->filled('password')) {
-                $user->update([
-                    'password' => Hash::make($request->password),
-                ]);
+                $updateData['password'] = Hash::make($request->password);
             }
+
+            $user->update($updateData);
 
             // Sync roles
             $user->syncRoles($request->roles);
@@ -192,7 +236,7 @@ class UserController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            
+
             return redirect()->back()
                 ->with('error', 'Failed to update user: ' . $e->getMessage())
                 ->withInput();
@@ -220,7 +264,7 @@ class UserController extends Controller
             }
 
             $user->delete();
-            
+
             return redirect()->route('userlist.view')
                 ->with('success', 'User deleted successfully.');
 
@@ -245,7 +289,6 @@ class UserController extends Controller
                     'message' => 'You cannot deactivate your own account.'
                 ], 403);
             }
-
 
             return response()->json([
                 'success' => true,
@@ -273,11 +316,11 @@ class UserController extends Controller
 
         // Toggle between shadow and general
         $newType = $user->type === 'shadow' ? 'general' : 'shadow';
-        
+
         try {
             $user->type = $newType;
             $user->save();
-            
+
             // Refresh the user in the session
             Auth::setUser($user->fresh());
 
@@ -291,15 +334,5 @@ class UserController extends Controller
 
             return redirect()->back()->with('error', 'Failed to switch mode: ' . $e->getMessage());
         }
-    }
-
-    /**
-     * Show create form
-     */
-    public function create()
-    {
-        return Inertia::render('Users/Create', [
-            'roles' => Role::where('name', '!=', 'Super Admin')->get()->pluck('name'),
-        ]);
     }
 }

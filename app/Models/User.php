@@ -19,7 +19,6 @@ class User extends Authenticatable
         'role',
         'phone',
         'address',
-        'status',
         'parent_id',
         'current_outlet_id',
         'outlet_logged_in_at',
@@ -103,16 +102,6 @@ class User extends Authenticatable
         return !is_null($this->current_outlet_id) && $this->current_outlet_id > 0;
     }
 
-    public function getAvailableOutletsAttribute()
-    {
-        return Outlet::where('user_id', $this->id)->get();
-    }
-
-    public function canAccessOutlet($outletId): bool
-    {
-        return $this->availableOutlets->contains('id', $outletId);
-    }
-
     public function loginToOutlet($outletId): bool
     {
         if (!$this->canAccessOutlet($outletId)) {
@@ -155,5 +144,21 @@ class User extends Authenticatable
                     ->orWhere('phone', 'like', "%{$search}%");
             });
         }
+    }
+
+    public function ownerId(): int
+    {
+        return $this->parent_id ?: $this->id;
+    }
+
+    public function getAvailableOutletsAttribute()
+    {
+        // owner + staff উভয়ের জন্য owner-এর outlets
+        return Outlet::where('user_id', $this->ownerId())->get();
+    }
+
+    public function canAccessOutlet($outletId): bool
+    {
+        return $this->availableOutlets->contains('id', (int) $outletId);
     }
 }

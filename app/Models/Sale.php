@@ -6,10 +6,12 @@ use App\Scopes\UserScope;
 use App\Scopes\OutletScope;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToTenant;
 
 class Sale extends Model
 {
-  protected $fillable = [
+    use BelongsToTenant;
+    protected $fillable = [
         'customer_id',
         'supplier_id',
         'invoice_no',
@@ -40,18 +42,18 @@ class Sale extends Model
     {
         static::addGlobalScope(new UserScope);
         static::addGlobalScope(new OutletScope);
-        
+
         static::creating(function ($attribute) {
             if (Auth::check()) {
                 $user = Auth::user();
                 $attribute->created_by = $user->id;
-                
+
                 if ($user->current_outlet_id) {
                     $attribute->outlet_id = $user->current_outlet_id;
                 }
             }
         });
-        
+
         static::updating(function ($attribute) {
             $originalOutletId = $attribute->getOriginal('outlet_id');
             if ($originalOutletId !== null && $attribute->outlet_id !== $originalOutletId) {

@@ -346,8 +346,25 @@ export default function Layout({ children }) {
 
   // Flash
   useEffect(() => {
-    if (flash?.error) toast.error(flash.error);
-    if (flash?.success) toast.success(flash.success);
+    // Skip if no flash or if already shown
+    if (!flash) return;
+
+    let toastId;
+
+    if (flash.error) {
+      toastId = toast.error(flash.error, { toastId: flash.error });
+    }
+
+    if (flash.success) {
+      toastId = toast.success(flash.success, { toastId: flash.success });
+    }
+
+    // Clean up flash to prevent re-showing
+    return () => {
+      if (toastId) {
+        toast.dismiss(toastId);
+      }
+    };
   }, [flash]);
 
   const openNotes = () => {
@@ -653,9 +670,8 @@ export default function Layout({ children }) {
                       <div
                         key={n.id}
                         onClick={() => setActiveId(n.id)}
-                        className={`cursor-pointer rounded-3xl p-4 border transition ${
-                          active ? "bg-[#EAF6EE] border-green-200" : "bg-white border-black/5 hover:bg-white"
-                        }`}
+                        className={`cursor-pointer rounded-3xl p-4 border transition ${active ? "bg-[#EAF6EE] border-green-200" : "bg-white border-black/5 hover:bg-white"
+                          }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -809,9 +825,8 @@ export default function Layout({ children }) {
 
       {/* Main content */}
       <main
-        className={`lg:ml-72 flex-1 min-h-screen transition-all flex flex-col ${
-          sidebarOpen ? "ml-0" : ""
-        }`}
+        className={`lg:ml-72 flex-1 min-h-screen transition-all flex flex-col ${sidebarOpen ? "ml-0" : ""
+          }`}
       >
         <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
         <div className="p-4 lg:p-8 space-y-8 flex-1">{children}</div>

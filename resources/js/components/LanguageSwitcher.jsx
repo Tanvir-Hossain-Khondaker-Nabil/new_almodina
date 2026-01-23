@@ -31,7 +31,7 @@ const LanguageSwitcher = ({ className = '' }) => {
     const currentLanguage = availableLocales[locale] || { native: 'English', code: 'en' };
 
     return (
-        <div className={`relative inline-block ${className}`} ref={dropdownRef}>
+        <div className={`relative inline-block  ${className}`} ref={dropdownRef}>
             {/* Main Button - Modern Compact Design */}
             <button
                 type="button"
@@ -66,9 +66,9 @@ const LanguageSwitcher = ({ className = '' }) => {
 
             {/* Dropdown Menu - Modern Design */}
             {isOpen && (
-                <div className="origin-top-right absolute right-0 mt-2 w-56 rounded-xl shadow-2xl bg-white border border-gray-200 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                <div className="origin-top-left absolute left-0 mt-2 w-56 rounded-xl shadow-2xl bg-white border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-top-2 z-[99999999]">
                     {/* Dropdown Header */}
-                    <div className="p-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
+                    <div className="p-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 ">
                         <div className="flex items-center gap-2">
                             <Settings size={16} className="text-gray-400" />
                             <h3 className="text-sm font-bold text-gray-800">Language Settings</h3>
@@ -134,7 +134,7 @@ const LanguageSwitcher = ({ className = '' }) => {
                     </div>
 
                     {/* Dropdown Footer */}
-                    <div className="p-3 border-t border-gray-100 bg-gray-50">
+                    <div className="p-3 border-t  border-gray-100 bg-gray-50">
                         <div className="flex items-center justify-between">
                             <span className="text-xs text-gray-500">
                                 <span className="font-bold">Current:</span> {currentLanguage.native}
