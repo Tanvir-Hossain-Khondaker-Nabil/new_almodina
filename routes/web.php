@@ -13,7 +13,6 @@ use App\Http\Controllers\AwardController;
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\SalesController;
-use App\Http\Controllers\LadgerController;
 use App\Http\Controllers\LedgerController;
 use App\Http\Controllers\ModuleController;
 use App\Http\Controllers\SalaryController;

@@ -92,7 +92,7 @@ export default function AddSale({
     // BARCODE SCANNER
     const barcodeRef = useRef(null);
     const [scanError, setScanError] = useState("");
-    const [autoFocusScanner, setAutoFocusScanner] = useState(true);
+    const [autoFocusScanner, setAutoFocusScanner] = useState(false);
 
     const form = useForm({
         customer_id: "",
@@ -1040,47 +1040,61 @@ export default function AddSale({
         [scanIndex, handleProductSelect, buildVariantWithStocksFromStockRow]
     );
 
-    // automotion
+    // FIXED: Barcode scanner - only intercept when not focused on input/textarea/select
     const SCAN_TIMEOUT = 100;
-    const barcodeRefNew = useRef("");
-    const lastScanTimeRef = useRef(0);
+    const barcodeBufferRef = useRef("");
+    const lastKeyTimeRef = useRef(0);
 
     useEffect(() => {
         const handleKeydown = (e) => {
-            // Prevent default for all keys during scanning
-            e.preventDefault();
+            const tag = e.target.tagName;
+            const isTypingField =
+                tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable;
 
             const now = Date.now();
+            const fast = now - lastKeyTimeRef.current <= SCAN_TIMEOUT;
 
-            // Filter out special keys more comprehensively
+            // ✅ If scanner is sending fast keys, we treat it as scanning mode
+            const isScanningMode = fast || barcodeBufferRef.current.length > 0;
 
+            // ✅ ENTER: end of scan
+            if (e.key === "Enter") {
+                // If we have buffered scan chars, this Enter is scanner-enter
+                if (barcodeBufferRef.current.length > 0) {
+                    e.preventDefault();      // ✅ stops form submit
+                    e.stopPropagation();
 
-            // Handle Enter key (barcode end)
-            if (e.key === 'Enter') {
-                if (barcodeRefNew.current.length > 0) {
-                    console.log('Scanned code:', barcodeRefNew.current);
-                    handleBarcodeScan(barcodeRefNew.current);
-                    barcodeRefNew.current = "";
+                    const scanned = barcodeBufferRef.current;
+                    barcodeBufferRef.current = "";
+                    lastKeyTimeRef.current = 0;
+
+                    handleBarcodeScan(scanned);
                 }
                 return;
             }
 
-            // Handle character keys only (skip special characters)
+            // ✅ character key
             if (e.key.length === 1) {
-                if (now - lastScanTimeRef.current > SCAN_TIMEOUT) {
-                    // New scan starting
-                    barcodeRefNew.current = e.key;
-                } else {
-                    // Continuing scan
-                    barcodeRefNew.current += e.key;
-                }
+                // If user is typing normally in a field AND not scanning, ignore
+                if (isTypingField && !isScanningMode) return;
 
-                lastScanTimeRef.current = now;
+                // build buffer
+                if (!fast) barcodeBufferRef.current = e.key;
+                else barcodeBufferRef.current += e.key;
+
+                lastKeyTimeRef.current = now;
+
+                // ✅ optionally prevent random inputs getting characters during scan
+                if (isTypingField) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
             }
         };
 
-        window.addEventListener('keydown', handleKeydown, true); // Use capture phase
-        return () => window.removeEventListener('keydown', handleKeydown, true);
+        // ✅ capture=true so we can block submit before form handles Enter
+        window.addEventListener("keydown", handleKeydown, true);
+        return () => window.removeEventListener("keydown", handleKeydown, true);
     }, [handleBarcodeScan]);
 
     // ✅ Auto-focus scanner input
@@ -1088,14 +1102,6 @@ export default function AddSale({
         if (!autoFocusScanner) return;
         const t = setTimeout(() => barcodeRef.current?.focus(), 200);
         return () => clearTimeout(t);
-    }, [autoFocusScanner]);
-
-    // Optional: keep focus after clicks
-    useEffect(() => {
-        if (!autoFocusScanner) return;
-        const onClick = () => barcodeRef.current?.focus();
-        window.addEventListener("click", onClick);
-        return () => window.removeEventListener("click", onClick);
     }, [autoFocusScanner]);
 
     // ========== PICKUP SALE FUNCTIONS ==========
@@ -1337,7 +1343,7 @@ export default function AddSale({
         }
 
         form.post(route("sales.store"), {
-            onSuccess: () => router.visit(route("sales.index")),
+            // onSuccess: () => router.visit(route("sales.index")),
             onError: (errors) => {
                 console.error(errors);
                 alert(errors.error || "Failed to create sale. Please check the form data.");
@@ -1460,6 +1466,7 @@ export default function AddSale({
                                         className="input input-bordered"
                                         value={customerNameInput}
                                         onChange={(e) => handleCustomerNameChange(e.target.value)}
+                                        onFocus={(e) => e.target.select()}
                                     />
                                 </div>
 
@@ -1473,6 +1480,7 @@ export default function AddSale({
                                         className="input input-bordered"
                                         value={customerPhoneInput}
                                         onChange={(e) => handleCustomerPhoneChange(e.target.value)}
+                                        onFocus={(e) => e.target.select()}
                                     />
                                 </div>
                             </>
@@ -1570,6 +1578,7 @@ export default function AddSale({
                                         value={paidAmount}
                                         onChange={handleManualPaymentInput}
                                         disabled={!manualPaymentOverride && adjustFromAdvance}
+                                        onFocus={(e) => e.target.select()}
                                     />
                                 </div>
 
@@ -1625,6 +1634,7 @@ export default function AddSale({
                                 value={form.data.sale_date}
                                 onChange={(e) => form.setData("sale_date", e.target.value)}
                                 required
+                                onFocus={(e) => e.target.select()}
                             />
                         </div>
 
@@ -1639,6 +1649,7 @@ export default function AddSale({
                                 value={form.data.notes}
                                 onChange={(e) => form.setData("notes", e.target.value)}
                                 placeholder="Additional notes..."
+                                onFocus={(e) => e.target.select()}
                             />
                         </div>
                     </div>
@@ -1673,6 +1684,7 @@ export default function AddSale({
                             <div className="form-control mb-4 relative">
                                 <div className="relative">
                                     <input
+                                        ref={barcodeRef}
                                         type="text"
                                         className="input input-bordered w-full pr-10"
                                         value={productSearch}
@@ -1682,6 +1694,7 @@ export default function AddSale({
                                         }}
                                         onClick={() => setShowProductDropdown(true)}
                                         placeholder="Search products by name or SKU..."
+                                        onFocus={(e) => e.target.select()}
                                     />
                                     <Search size={18} className="absolute right-3 top-3.5 text-gray-400" />
 
@@ -2010,6 +2023,7 @@ export default function AddSale({
                                                                     )
                                                                 }
                                                                 required
+                                                                onFocus={(e) => e.target.select()}
                                                             />
                                                             <div className="text-xs text-gray-500 mt-1">
                                                                 In{" "}
@@ -2034,6 +2048,7 @@ export default function AddSale({
                                                                         item.unit_price
                                                                     )}
                                                                     readOnly
+                                                                    onFocus={(e) => e.target.select()}
                                                                 />
                                                                 <div className="absolute right-3 top-2.5 text-gray-500">
                                                                     <Calculator
@@ -2078,6 +2093,7 @@ export default function AddSale({
                                                                     item.total_price
                                                                 )}
                                                                 readOnly
+                                                                onFocus={(e) => e.target.select()}
                                                             />
                                                         </div>
                                                     </div>
@@ -2358,6 +2374,7 @@ export default function AddSale({
                                                         ) || 0
                                                     )
                                                 }
+                                                onFocus={(e) => e.target.select()}
                                             />
                                             <span>%</span>
                                         </div>
@@ -2381,6 +2398,7 @@ export default function AddSale({
                                                         ) || 0
                                                     )
                                                 }
+                                                onFocus={(e) => e.target.select()}
                                             />
                                             <span>%</span>
                                         </div>
@@ -2461,6 +2479,7 @@ export default function AddSale({
                                         setPickupProductName(e.target.value)
                                     }
                                     placeholder="Enter product name"
+                                    onFocus={(e) => e.target.select()}
                                 />
                             </div>
 
@@ -2479,6 +2498,7 @@ export default function AddSale({
                                             setPickupBrand(e.target.value)
                                         }
                                         placeholder="Enter brand"
+                                        onFocus={(e) => e.target.select()}
                                     />
                                 </div>
 
@@ -2496,6 +2516,7 @@ export default function AddSale({
                                             setPickupVariant(e.target.value)
                                         }
                                         placeholder="Enter variant"
+                                        onFocus={(e) => e.target.select()}
                                     />
                                 </div>
                             </div>
@@ -2515,6 +2536,7 @@ export default function AddSale({
                                             setPickupQuantity(e.target.value)
                                         }
                                         min="1"
+                                        onFocus={(e) => e.target.select()}
                                     />
                                 </div>
 
@@ -2533,6 +2555,7 @@ export default function AddSale({
                                         }
                                         min="0"
                                         step="0.01"
+                                        onFocus={(e) => e.target.select()}
                                     />
                                 </div>
 
@@ -2551,6 +2574,7 @@ export default function AddSale({
                                         }
                                         min="0"
                                         step="0.01"
+                                        onFocus={(e) => e.target.select()}
                                     />
                                 </div>
                             </div>
@@ -2605,6 +2629,7 @@ export default function AddSale({
                                         setNewSupplierName(e.target.value)
                                     }
                                     placeholder="Enter supplier name"
+                                    onFocus={(e) => e.target.select()}
                                 />
                             </div>
 
@@ -2620,6 +2645,7 @@ export default function AddSale({
                                         setNewSupplierCompany(e.target.value)
                                     }
                                     placeholder="Enter company name"
+                                    onFocus={(e) => e.target.select()}
                                 />
                             </div>
 
@@ -2635,6 +2661,7 @@ export default function AddSale({
                                         setNewSupplierPhone(e.target.value)
                                     }
                                     placeholder="Enter phone number"
+                                    onFocus={(e) => e.target.select()}
                                 />
                             </div>
                         </div>

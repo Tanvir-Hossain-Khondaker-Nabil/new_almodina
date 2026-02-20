@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>আল-মদিনা স্টোর</title>
+    <title>Al Modina</title>
     <link rel="shortcut icon" href="https://i.ibb.co.com/t0bPR3c/output-onlinepngtools-12-1.png" type="image/x-icon">
     @routes
     @viteReactRefresh
@@ -12,8 +12,8 @@
     @inertiaHead
 
 
-    <link rel="stylesheet" href="{{ asset('build/assets/app-Fc6i4B7k.css') }}">
-    <script src="{{ asset('build/assets/app-DsZeJzr1.js') }}" type="module"></script>
+    {{-- <link rel="stylesheet" href="{{ asset('build/assets/app-Cjm6fu4h.css') }}">
+    <script src="{{ asset('build/assets/app-Br90hxyl.js') }}" type="module"></script> --}}
 </head>
 
 

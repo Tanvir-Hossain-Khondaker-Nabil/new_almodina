@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import PageHeader from "../../components/PageHeader";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import { Eye, Search, Filter, Frown, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "react-toastify";
-import Select from "react-select";
 
 export default function AllSalesItems({ salesItems }) {
     const { flash, isShadowUser } = usePage().props;
@@ -28,7 +27,7 @@ export default function AllSalesItems({ salesItems }) {
     };
 
     const handleKeyPress = (e) => {
-        if (e.key == 'Enter') {
+        if (e.key === 'Enter') {
             const queryString = {};
             if (filters.search) queryString.search = filters.search;
             if (filters.customer) queryString.customer_id = filters.customer;
@@ -50,13 +49,18 @@ export default function AllSalesItems({ salesItems }) {
 
     // Format date
     const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        if (!dateString) return 'N/A';
+        try {
+            return new Date(dateString).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (e) {
+            return 'Invalid Date';
+        }
     };
 
     // Format currency
@@ -72,9 +76,10 @@ export default function AllSalesItems({ salesItems }) {
 
     // Calculate item total
     const calculateItemTotal = (item) => {
+        if (!item) return '0.00';
         const price = parseFloat(item.unit_price) || 0;
         const quantity = parseFloat(item.quantity) || 0;
-        const discount = parseFloat(item.discount) || 0;
+        const discount = parseFloat(item.sale?.discount) || 0;
 
         const subtotal = price * quantity;
         const discountAmount = (subtotal * discount) / 100;
@@ -202,8 +207,8 @@ export default function AllSalesItems({ salesItems }) {
                         </thead>
                         <tbody>
                             {safeSalesItems.map((item, index) => (
-                                <>
-                                    <tr key={item.id} className="hover:bg-base-200">
+                                <Fragment key={item?.id || index}>
+                                    <tr className="hover:bg-base-200">
                                         <td>
                                             <button
                                                 onClick={() => toggleRow(index)}
@@ -219,24 +224,22 @@ export default function AllSalesItems({ salesItems }) {
                                         <td>
                                             <div className="max-w-[200px]">
                                                 <div className="font-medium text-sm">
-                                                    {item.product?.name ?? item.product_name}
+                                                    {item?.product?.name ?? item?.product_name ?? 'N/A'}
                                                 </div>
-
                                                 <div className="text-xs text-gray-500">
-                                                    {item.variant
-                                                        ? `Variant: ${item.variant.sku ?? ''}`
-                                                        : item.variant_name
+                                                    {item?.variant
+                                                        ? `Variant: ${item.variant?.sku ?? ''}`
+                                                        : item?.variant_name ?? ''
                                                     }
                                                 </div>
                                             </div>
-
                                         </td>
                                         <td>
                                             <div className="max-w-[150px]">
                                                 <div className="text-sm">
-                                                    {item.sale?.customer?.customer_name || 'Walk-in Customer'}
+                                                    {item?.sale?.customer?.customer_name || 'Walk-in Customer'}
                                                 </div>
-                                                {item.sale?.customer?.phone && (
+                                                {item?.sale?.customer?.phone && (
                                                     <div className="text-xs text-gray-500">
                                                         {item.sale.customer.phone}
                                                     </div>
@@ -245,23 +248,22 @@ export default function AllSalesItems({ salesItems }) {
                                         </td>
                                         <td>
                                             <div className="text-sm">
-                                                {parseFloat(item.unit_price).toFixed(2)} Tk
+                                                {parseFloat(item?.unit_price || 0).toFixed(2)} Tk
                                             </div>
                                         </td>
                                         <td>
                                             <div className="text-sm">
-                                                {item.quantity}
+                                                {item?.quantity || 0}
                                             </div>
                                         </td>
                                         <td>
                                             <div className="text-sm">
-                                                {item.sale.discount}%
+                                                {item?.sale?.discount || 0}%
                                             </div>
                                         </td>
-
                                         <td>
                                             <div className="badge badge-info badge-sm">
-                                                <strong>{item.sale.type}</strong>
+                                                <strong>{item?.sale?.type || 'N/A'}</strong>
                                             </div>
                                         </td>
                                         <td>
@@ -271,113 +273,115 @@ export default function AllSalesItems({ salesItems }) {
                                         </td>
                                         <td>
                                             <div className="text-sm">
-                                                {item.warehouse?.name || 'N/A'}
+                                                {item?.warehouse?.name || 'N/A'}
                                             </div>
                                         </td>
                                         <td>
                                             <div className="text-xs text-gray-500">
-                                                {formatDate(item.created_at)}
+                                                {formatDate(item?.created_at)}
                                             </div>
                                         </td>
                                         <td>
                                             <div className="flex items-center gap-1">
-                                                <Link
-                                                    href={route('sales.items.show', { id: item.id })}
-                                                    className="btn btn-ghost btn-xs"
-                                                    title="View Sale"
-                                                >
-                                                    <Eye size={12} />
-                                                </Link>
+                                                {item?.id && (
+                                                    <Link
+                                                        href={route('sales.items.show', { id: item.id })}
+                                                        className="btn btn-ghost btn-xs"
+                                                        title="View Sale"
+                                                    >
+                                                        <Eye size={12} />
+                                                    </Link>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
 
                                     {/* Expanded Row Details */}
-                                    {expandedRow === index && (
+                                    {expandedRow === index && item && (
                                         <tr className="bg-base-200">
-                                            <td colSpan="10">
+                                            <td colSpan="11">
                                                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                                                     <div>
                                                         <strong style={{ fontSize: '16px' }}>Product Details:</strong>
-                                                        <div><strong>Name:</strong> {item.product?.name || item?.product_name}</div>
-                                                        {item.variant && (
-                                                        <div><strong>Brand:</strong>
-                                                            {(() => {
-                                                                const variant = item.variant;
-                                                                let attrsText = '';
+                                                        <div><strong>Name:</strong> {item?.product?.name || item?.product_name || 'N/A'}</div>
+                                                        
+                                                        {item?.variant && (
+                                                            <>
+                                                                <div>
+                                                                    <strong>Brand:</strong>{' '}
+                                                                    {(() => {
+                                                                        const variant = item.variant;
+                                                                        let attrsText = '';
 
-                                                                if (variant.attribute_values) {
-                                                                    if (typeof variant.attribute_values === 'object') {
-                                                                        attrsText = Object.entries(variant.attribute_values)
-                                                                            .map(([key, value]) => ` ${key}`)
-                                                                            .join(', ');
-                                                                    } else {
-                                                                        attrsText = variant.attribute_values;
-                                                                    }
-                                                                }
-
-                                                                return (
-                                                                    <>
-                                                                        {attrsText || 'N/A'}
-                                                                    </>
-                                                                );
-                                                            })()}<br />
-                                                            </div>
-                                                        )}
-
-                                                        <div><strong>Code:</strong> {item.product?.product_no || 'N/A'}</div>
-                                                        {item.variant && (
-                                                            <div>
-                                                                <strong>Variant:</strong>{' '}
-                                                                {(() => {
-                                                                    const variant = item.variant;
-                                                                    let attrsText = '';
-
-                                                                    if (variant.attribute_values) {
-                                                                        if (typeof variant.attribute_values === 'object') {
-                                                                            attrsText = Object.entries(variant.attribute_values)
-                                                                                .map(([key, value]) => ` ${value}`)
-                                                                                .join(', ');
-                                                                        } else {
-                                                                            attrsText = variant.attribute_values;
+                                                                        if (variant?.attribute_values) {
+                                                                            if (typeof variant.attribute_values === 'object' && variant.attribute_values !== null) {
+                                                                                attrsText = Object.entries(variant.attribute_values)
+                                                                                    .map(([key, value]) => ` ${key}`)
+                                                                                    .join(', ');
+                                                                            } else {
+                                                                                attrsText = variant.attribute_values;
+                                                                            }
                                                                         }
-                                                                    }
 
-                                                                    return (
-                                                                        <>
-                                                                            {attrsText || 'N/A'} {variant.sku ? `(${variant.sku})` : ''}
-                                                                        </>
-                                                                    );
-                                                                })()}
-                                                            </div>
+                                                                        return attrsText || 'N/A';
+                                                                    })()}
+                                                                </div>
+                                                                <div>
+                                                                    <strong>Variant:</strong>{' '}
+                                                                    {(() => {
+                                                                        const variant = item.variant;
+                                                                        let attrsText = '';
+
+                                                                        if (variant?.attribute_values) {
+                                                                            if (typeof variant.attribute_values === 'object' && variant.attribute_values !== null) {
+                                                                                attrsText = Object.entries(variant.attribute_values)
+                                                                                    .map(([key, value]) => ` ${value}`)
+                                                                                    .join(', ');
+                                                                            } else {
+                                                                                attrsText = variant.attribute_values;
+                                                                            }
+                                                                        }
+
+                                                                        return (
+                                                                            <>
+                                                                                {attrsText || 'N/A'} {variant?.sku ? `(${variant.sku})` : ''}
+                                                                            </>
+                                                                        );
+                                                                    })()}
+                                                                </div>
+                                                            </>
                                                         )}
-
+                                                        
+                                                        <div><strong>Code:</strong> {item?.product?.product_no || 'N/A'}</div>
                                                     </div>
+                                                    
                                                     <div>
                                                         <strong style={{ fontSize: '16px' }}>Sale Details:</strong>
-                                                        <div> <strong>Sale ID:</strong> {item.sale_id}</div>
-                                                        <div><strong>Invoice:</strong> {item.sale?.invoice_no || 'N/A'}</div>
-                                                        <div> <strong>Status:</strong> {item.sale?.status || 'N/A'}</div>
+                                                        <div><strong>Sale ID:</strong> {item?.sale_id || 'N/A'}</div>
+                                                        <div><strong>Invoice:</strong> {item?.sale?.invoice_no || 'N/A'}</div>
+                                                        <div><strong>Status:</strong> {item?.sale?.status || 'N/A'}</div>
                                                     </div>
+                                                    
                                                     <div>
                                                         <strong style={{ fontSize: '16px' }}>Pricing:</strong>
-                                                        <div><strong>Unit Price:</strong> {parseFloat(item.unit_price).toFixed(2)} Tk</div>
-                                                        <div><strong>Quantity:</strong> {item.quantity}</div>
-                                                        <div><strong>Discount:</strong> {item.sale?.discount}%</div>
-                                                        <div><strong>VAT:</strong> {item.sale?.vat_tax}%</div>
+                                                        <div><strong>Unit Price:</strong> {parseFloat(item?.unit_price || 0).toFixed(2)} Tk</div>
+                                                        <div><strong>Quantity:</strong> {item?.quantity || 0}</div>
+                                                        <div><strong>Discount:</strong> {item?.sale?.discount || 0}%</div>
+                                                        <div><strong>VAT:</strong> {item?.sale?.vat_tax || 0}%</div>
                                                         <div><strong>Total:</strong> {calculateItemTotal(item)} Tk</div>
                                                     </div>
+                                                    
                                                     <div>
                                                         <strong style={{ fontSize: '16px' }}>Additional Info:</strong>
-                                                        <div><strong>Warehouse:</strong> {item.warehouse?.name || 'N/A'}</div>
+                                                        <div><strong>Warehouse:</strong> {item?.warehouse?.name || 'N/A'}</div>
                                                         <div><strong>Sold By:</strong> System Admin</div>
-                                                        <div><strong>Date:</strong> {formatDate(item.created_at)}</div>
+                                                        <div><strong>Date:</strong> {formatDate(item?.created_at)}</div>
                                                     </div>
                                                 </div>
                                             </td>
                                         </tr>
                                     )}
-                                </>
+                                </Fragment>
                             ))}
                         </tbody>
                     </table>
@@ -395,7 +399,7 @@ export default function AllSalesItems({ salesItems }) {
             </div>
 
             {/* Pagination */}
-            {safeSalesItems.length > 0 && (
+            {safeSalesItems.length > 0 && salesItems && (
                 <div className="flex items-center justify-between mt-4 px-2">
                     <div className="text-sm text-gray-600">
                         Showing {salesItems.from || 0} to {salesItems.to || 0} of {salesItems.total || 0} entries
@@ -415,12 +419,12 @@ export default function AllSalesItems({ salesItems }) {
                         {salesItems.links?.slice(1, -1).map((link, index) => (
                             <Link
                                 key={index}
-                                href={link.url}
-                                className={`join-item btn btn-sm ${link.active ? 'bg-[#1e4d2b] text-white' : ''
+                                href={link?.url || '#'}
+                                className={`join-item btn btn-sm ${link?.active ? 'bg-[#1e4d2b] text-white' : ''
                                     }`}
                                 preserveScroll
                                 preserveState
-                                dangerouslySetInnerHTML={{ __html: link.label }}
+                                dangerouslySetInnerHTML={{ __html: link?.label || '' }}
                             />
                         ))}
 
@@ -444,13 +448,13 @@ export default function AllSalesItems({ salesItems }) {
                     <div className="stat bg-[#1e4d2b] text-white rounded-box">
                         <div className="stat-title">Total Items</div>
                         <div className="stat-value text-primary text-lg">
-                            {salesItems.total || 0}
+                            {salesItems?.total || 0}
                         </div>
                     </div>
                     <div className="stat bg-success/10 rounded-box">
                         <div className="stat-title">Total Quantity</div>
                         <div className="stat-value text-success text-lg">
-                            {safeSalesItems.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0)}
+                            {safeSalesItems.reduce((sum, item) => sum + parseFloat(item?.quantity || 0), 0)}
                         </div>
                     </div>
                     <div className="stat bg-warning/10 rounded-box">
@@ -462,7 +466,9 @@ export default function AllSalesItems({ salesItems }) {
                     <div className="stat bg-info/10 rounded-box">
                         <div className="stat-title">Avg. per Item</div>
                         <div className="stat-value text-info text-lg">
-                            {(safeSalesItems.reduce((sum, item) => sum + parseFloat(calculateItemTotal(item) || 0), 0) / safeSalesItems.length).toFixed(2)} Tk
+                            {safeSalesItems.length > 0 
+                                ? (safeSalesItems.reduce((sum, item) => sum + parseFloat(calculateItemTotal(item) || 0), 0) / safeSalesItems.length).toFixed(2) 
+                                : '0.00'} Tk
                         </div>
                     </div>
                 </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import PageHeader from "../../components/PageHeader";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import { Eye, Search, Filter, Frown, ChevronDown, ChevronUp, Package, Building, Calendar } from "lucide-react";
@@ -10,9 +10,9 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
     
     // Handle search and filtering
     const searchForm = useForm({
-        product_id: filters.product_id || "",
-        date_from: filters.date_from || "",
-        date_to: filters.date_to || "",
+        product_id: filters?.product_id || "",
+        date_from: filters?.date_from || "",
+        date_to: filters?.date_to || "",
     });
 
     const handleFilterChange = (field, value) => {
@@ -38,23 +38,33 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
 
     // Format date
     const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        if (!dateString) return 'N/A';
+        try {
+            return new Date(dateString).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (e) {
+            return 'Invalid Date';
+        }
     };
 
     // Format date for input
     const formatDateForInput = (dateString) => {
         if (!dateString) return '';
-        return new Date(dateString).toISOString().split('T')[0];
+        try {
+            return new Date(dateString).toISOString().split('T')[0];
+        } catch (e) {
+            return '';
+        }
     };
 
     // Calculate item total
     const calculateItemTotal = (item) => {
+        if (!item) return '0.00';
         const price = parseFloat(item.unit_price) || 0;
         const quantity = parseFloat(item.quantity) || 0;
         const discount = parseFloat(item.discount) || 0;
@@ -70,7 +80,7 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
         
         let attrsText = '';
         if (variant.attribute_values) {
-            if (typeof variant.attribute_values === 'object') {
+            if (typeof variant.attribute_values === 'object' && variant.attribute_values !== null) {
                 attrsText = Object.entries(variant.attribute_values)
                     .map(([key, value]) => `${key}: ${value}`)
                     .join(', ');
@@ -93,7 +103,18 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
 
     // Calculate summary statistics
     const calculateSummaryStats = () => {
+        if (!purchaseItems?.data || !Array.isArray(purchaseItems.data)) {
+            return {
+                totalItems: 0,
+                totalQuantity: 0,
+                totalAmount: 0,
+                averagePerItem: 0
+            };
+        }
+
         const stats = purchaseItems.data.reduce((acc, item) => {
+            if (!item) return acc;
+            
             acc.totalItems += 1;
             acc.totalQuantity += parseFloat(item.quantity) || 0;
             acc.totalAmount += parseFloat(calculateItemTotal(item)) || 0;
@@ -110,6 +131,9 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
     };
 
     const stats = calculateSummaryStats();
+
+    // Safe data access
+    const safePurchaseItems = purchaseItems?.data || [];
 
     return (
         <div className="bg-white rounded-box p-5">
@@ -178,7 +202,7 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
 
             {/* Purchase Items Table */}
             <div className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
-                {purchaseItems.data.length > 0 ? (
+                {safePurchaseItems.length > 0 ? (
                     <table className="table">
                         <thead className={`${isShadowUser ? 'bg-warning' : 'bg-[#1e4d2b] text-white'} text-white`}>
                             <tr>
@@ -195,9 +219,9 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
                             </tr>
                         </thead>
                         <tbody>
-                            {purchaseItems.data.map((item, index) => (
-                                <>
-                                    <tr key={item.id} className="hover:bg-base-200">
+                            {safePurchaseItems.map((item, index) => (
+                                <Fragment key={item?.id || index}>
+                                    <tr className="hover:bg-base-200">
                                         <td>
                                             <button
                                                 onClick={() => toggleRow(index)}
@@ -213,25 +237,28 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
                                         <td>
                                             <div className="max-w-[200px]">
                                                 <div className="font-medium text-sm">
-                                                    {item.product?.name || item?.product_name} 
-                                                    {item.product?.product_no && ` (${item.product.product_no})`}
+                                                    {item?.product?.name || item?.product_name || 'N/A'} 
+                                                    {item?.product?.product_no && ` (${item.product.product_no})`}
                                                 </div>
-                                                {item.variant && (
+                                                {item?.variant && (
                                                     <div className="text-xs text-gray-500">
                                                         Variant: {getVariantText(item.variant)}
                                                         {item.variant?.sku && ` (${item.variant.sku})`}
                                                     </div>
                                                 )}
-                                                    {item?.variant_name} 
-
+                                                {item?.variant_name && (
+                                                    <div className="text-xs text-gray-500">
+                                                        {item.variant_name}
+                                                    </div>
+                                                )}
                                             </div>
                                         </td>
                                         <td>
                                             <div className="max-w-[150px]">
                                                 <div className="text-sm">
-                                                    Purchase #{item.purchase_id}
+                                                    Purchase #{item?.purchase_id || 'N/A'}
                                                 </div>
-                                                {item.purchase?.reference_no && (
+                                                {item?.purchase?.reference_no && (
                                                     <div className="text-xs text-gray-500">
                                                         Ref: {item.purchase.reference_no}
                                                     </div>
@@ -240,17 +267,17 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
                                         </td>
                                         <td>
                                             <div className="text-sm font-medium text-success">
-                                                {parseFloat(item.unit_price).toFixed(2)} Tk
+                                                {parseFloat(item?.unit_price || 0).toFixed(2)} Tk
                                             </div>
                                         </td>
                                         <td>
                                             <div className="text-sm">
-                                                {item.quantity}
+                                                {item?.quantity || 0}
                                             </div>
                                         </td>
                                         <td>
                                             <div className="text-sm">
-                                                {item.discount || 0}%
+                                                {item?.discount || 0}%
                                             </div>
                                         </td>
                                         <td>
@@ -265,49 +292,41 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
                                         </td>
                                         <td>
                                             <div className="text-xs text-gray-500">
-                                                {formatDate(item.created_at)}
+                                                {formatDate(item?.created_at)}
                                             </div>
                                         </td>
                                         <td>
                                             <div className="flex items-center gap-1">
-                                          
-                                                <Link
-                                                    href={route('purchaseItems.show', { id: item.id })}
-                                                    className="btn btn-ghost btn-xs"
-                                                    title="View Purchase Item"
-                                                >
-                                                    <Package size={12} />
-                                                </Link>
-                                                {/* {item.product && (
+                                                {item?.id && (
                                                     <Link
-                                                        href={route('products.show', { id: item.product_id })}
+                                                        href={route('purchaseItems.show', { id: item.id })}
                                                         className="btn btn-ghost btn-xs"
-                                                        title="View Product"
+                                                        title="View Purchase Item"
                                                     >
                                                         <Package size={12} />
                                                     </Link>
-                                                )} */}
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
                                     
                                     {/* Expanded Row Details */}
-                                    {expandedRow === index && (
+                                    {expandedRow === index && item && (
                                         <tr className="bg-base-200">
                                             <td colSpan="10">
                                                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                                                     <div>
                                                         <strong style={{ fontSize: '16px' }}>Product Details</strong>
                                                         <div className="mt-2 space-y-1">
-                                                            <div><strong>Name:</strong> {item.product?.name || item.product_name}</div>
-                                                            <div><strong>Code:</strong> {item.product?.product_no || item.product_name}</div>
-                                                            {item.product?.category && (
-                                                                <div><strong>Category:</strong> {item.product.category.name || 'N/A'}</div>
+                                                            <div><strong>Name:</strong> {item?.product?.name || item?.product_name || 'N/A'}</div>
+                                                            <div><strong>Code:</strong> {item?.product?.product_no || item?.product_name || 'N/A'}</div>
+                                                            {item?.product?.category && (
+                                                                <div><strong>Category:</strong> {item.product.category?.name || 'N/A'}</div>
                                                             )}
-                                                            {item.product?.brand && (
-                                                                <div><strong>Brand:</strong> {item.product.brand.name || 'N/A'}</div>
+                                                            {item?.product?.brand && (
+                                                                <div><strong>Brand:</strong> {item.product.brand?.name || 'N/A'}</div>
                                                             )}
-                                                            {item.variant && (
+                                                            {item?.variant && (
                                                                 <div>
                                                                     <strong>Variant:</strong> {getVariantText(item.variant)}
                                                                     {item.variant?.sku && ` (SKU: ${item.variant.sku})`}
@@ -318,21 +337,21 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
                                                     <div>
                                                         <strong style={{ fontSize: '16px' }}>Purchase Details</strong>
                                                         <div className="mt-2 space-y-1">
-                                                            <div><strong>Purchase ID:</strong> {item.purchase_id || 0}</div>
-                                                            <div><strong>Status:</strong> {item.purchase?.status || 'Completed'}</div>
-                                                            <div><strong>Supplier:</strong> {item.purchase?.supplier?.name || item?.supplier?.name || 'N/A'}</div>
-                                                            <div><strong>Payment Status:</strong> {item.purchase?.payment_status || 'Paid'}</div>
+                                                            <div><strong>Purchase ID:</strong> {item?.purchase_id || 'N/A'}</div>
+                                                            <div><strong>Status:</strong> {item?.purchase?.status || 'Completed'}</div>
+                                                            <div><strong>Supplier:</strong> {item?.purchase?.supplier?.name || item?.supplier?.name || 'N/A'}</div>
+                                                            <div><strong>Payment Status:</strong> {item?.purchase?.payment_status || 'Paid'}</div>
                                                         </div>
                                                     </div>
                                                     <div>
                                                         <strong style={{ fontSize: '16px' }}>Pricing Details</strong>
                                                         <div className="mt-2 space-y-1">
-                                                            <div><strong>Unit Price:</strong> {parseFloat(item.unit_price).toFixed(2)} Tk</div>
-                                                            <div><strong>Quantity:</strong> {item.quantity}</div>
-                                                            <div><strong>Discount:</strong> {item.discount || 0}%</div>
-                                                            <div><strong>Tax Rate:</strong> {item.tax_rate || 0}%</div>
+                                                            <div><strong>Unit Price:</strong> {parseFloat(item?.unit_price || 0).toFixed(2)} Tk</div>
+                                                            <div><strong>Quantity:</strong> {item?.quantity || 0}</div>
+                                                            <div><strong>Discount:</strong> {item?.discount || 0}%</div>
+                                                            <div><strong>Tax Rate:</strong> {item?.tax_rate || 0}%</div>
                                                             <div className="border-t pt-1 mt-1">
-                                                                <strong>Subtotal:</strong> {(item.unit_price * item.quantity).toFixed(2)} Tk
+                                                                <strong>Subtotal:</strong> {((item?.unit_price || 0) * (item?.quantity || 0)).toFixed(2)} Tk
                                                             </div>
                                                             <div className="font-semibold text-primary">
                                                                 <strong>Total:</strong> {calculateItemTotal(item)} Tk
@@ -344,18 +363,17 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
                                                         <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
                                                             <div>
                                                                 <div><strong>Warehouse:</strong> {item?.warehouse?.name || 'N/A'}</div>
-                                                                <div><strong>Created By:</strong> {item.purchase?.creator?.name || 'System Admin'}</div>
+                                                                <div><strong>Created By:</strong> {item?.purchase?.creator?.name || 'System Admin'}</div>
                                                             </div>
                                                             <div>
                                                                 <div><strong>Purchase Date:</strong> {item?.created_at ? formatDate(item.created_at) : 'N/A'}</div>
-                                                                {/* <div><strong>Expected Date:</strong> {item.purchase?.expected_date ? formatDate(item.purchase.expected_date) : 'N/A'}</div> */}
                                                             </div>
                                                             <div>
-                                                                <div><strong>Created At:</strong> {formatDate(item.created_at)}</div>
-                                                                <div><strong>Updated At:</strong> {formatDate(item.updated_at)}</div>
+                                                                <div><strong>Created At:</strong> {formatDate(item?.created_at)}</div>
+                                                                <div><strong>Updated At:</strong> {formatDate(item?.updated_at)}</div>
                                                             </div>
                                                         </div>
-                                                        {item.purchase?.notes && (
+                                                        {item?.purchase?.notes && (
                                                             <div className="mt-3 p-2 bg-gray-50 rounded">
                                                                 <strong>Notes:</strong> {item.purchase.notes}
                                                             </div>
@@ -365,7 +383,7 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
                                             </td>
                                         </tr>
                                     )}
-                                </>
+                                </Fragment>
                             ))}
                         </tbody>
                     </table>
@@ -383,10 +401,10 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
             </div>
 
             {/* Pagination */}
-            {purchaseItems.data.length > 0 && (
+            {safePurchaseItems.length > 0 && purchaseItems && (
                 <div className="flex items-center justify-between mt-4 px-2">
                     <div className="text-sm text-gray-600">
-                        Showing {purchaseItems.from} to {purchaseItems.to} of {purchaseItems.total} entries
+                        Showing {purchaseItems.from || 0} to {purchaseItems.to || 0} of {purchaseItems.total || 0} entries
                     </div>
                     <div className="join">
                         {purchaseItems.prev_page_url && (
@@ -400,16 +418,16 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
                             </Link>
                         )}
 
-                        {purchaseItems.links.slice(1, -1).map((link, index) => (
+                        {purchaseItems.links?.slice(1, -1).map((link, index) => (
                             <Link
                                 key={index}
-                                href={link.url}
+                                href={link?.url || '#'}
                                 className={`join-item btn btn-sm ${
-                                    link.active ? 'bg-[#1e4d2b] text-white' : ''
+                                    link?.active ? 'bg-[#1e4d2b] text-white' : ''
                                 }`}
                                 preserveScroll
                                 preserveState
-                                dangerouslySetInnerHTML={{ __html: link.label }}
+                                dangerouslySetInnerHTML={{ __html: link?.label || '' }}
                             />
                         ))}
 
@@ -428,7 +446,7 @@ export default function PurchaseItemsList({ purchaseItems, filters, isShadowUser
             )}
 
             {/* Summary Stats */}
-            {purchaseItems.data.length > 0 && (
+            {safePurchaseItems.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
                     <div className="stat bg-[#1e4d2b] text-white rounded-box">
                         <div className="stat-title">Total Items</div>

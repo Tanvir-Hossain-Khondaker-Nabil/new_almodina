@@ -344,28 +344,6 @@ export default function Layout({ children }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [noteOpen, mobileView, notes, activeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Flash
-  useEffect(() => {
-    // Skip if no flash or if already shown
-    if (!flash) return;
-
-    let toastId;
-
-    if (flash.error) {
-      toastId = toast.error(flash.error, { toastId: flash.error });
-    }
-
-    if (flash.success) {
-      toastId = toast.success(flash.success, { toastId: flash.success });
-    }
-
-    // Clean up flash to prevent re-showing
-    return () => {
-      if (toastId) {
-        toast.dismiss(toastId);
-      }
-    };
-  }, [flash]);
 
   const openNotes = () => {
     setNoteOpen(true);

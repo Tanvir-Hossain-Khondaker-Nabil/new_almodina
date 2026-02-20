@@ -530,11 +530,11 @@ export default function AddSale({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // ---------------- Barcode Scanner (AFTER catalog + addToCart exists) ----------------
+    // ---------------- Barcode Scanner (FIXED VERSION) ----------------
     const barcodeRef = useRef(null);
     const [barcodeValue, setBarcodeValue] = useState("");
     const [scanError, setScanError] = useState("");
-    const [autoFocusScanner, setAutoFocusScanner] = useState(true);
+    const [autoFocusScanner, setAutoFocusScanner] = useState(false);
 
     useEffect(() => {
         if (!autoFocusScanner) return;
@@ -596,53 +596,74 @@ export default function AddSale({
         [scanIndex, addToCart]
     );
 
-
-    // Fix the barcode scanning useEffect like this:
-    const SCAN_TIMEOUT = 100;
-    const barcodeRefNew = useRef("");
-    const lastScanTimeRef = useRef(0);
+    // ✅ FIXED: Barcode scanning - only intercept when not focused on input field
+    const SCAN_TIMEOUT = 80; // little tighter helps scanners
+    const scanBufferRef = useRef("");
+    const lastKeyTimeRef = useRef(0);
 
     useEffect(() => {
         const handleKeydown = (e) => {
-            e.preventDefault();
-            const now = Date.now();
+            const tag = e.target.tagName;
+            const isTypingField =
+                tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable;
 
-            // Ignore control and navigation keys
+            const now = Date.now();
+            const fast = now - lastKeyTimeRef.current <= SCAN_TIMEOUT;
+
+            // scanning mode if keys are coming fast or buffer already started
+            const isScanningMode = fast || scanBufferRef.current.length > 0;
+
+            // Ignore modifier/navigation keys
             if (
                 e.key === "Shift" ||
                 e.key === "Alt" ||
                 e.key === "Control" ||
+                e.key === "Meta" ||
                 e.key === "Tab" ||
                 e.key === "Escape" ||
-                e.key === "ArrowUp" ||
-                e.key === "ArrowDown" ||
-                e.key === "ArrowLeft" ||
-                e.key === "ArrowRight"
+                e.key.startsWith("Arrow")
             ) {
                 return;
             }
 
-            // Barcode finished
+            // ENTER ends scan
             if (e.key === "Enter") {
-                if (barcodeRefNew.current.length > 0) {
-                    handleBarcodeScan(barcodeRefNew.current);
-                    barcodeRefNew.current = "";
+                if (scanBufferRef.current.length > 0) {
+                    // ✅ stop form submit + stop input default behaviors
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const scanned = scanBufferRef.current;
+                    scanBufferRef.current = "";
+                    lastKeyTimeRef.current = 0;
+
+                    handleBarcodeScan(scanned);
                 }
                 return;
             }
 
-            // Reset buffer if delay is big (manual typing)
-            if (now - lastScanTimeRef.current > SCAN_TIMEOUT) {
-                barcodeRefNew.current = e.key;
-            } else {
-                barcodeRefNew.current += e.key;
-            }
+            // only normal character keys
+            if (e.key.length === 1) {
+                // If user typing normally in a field and not scanning, ignore
+                if (isTypingField && !isScanningMode) return;
 
-            lastScanTimeRef.current = now;
+                // build buffer
+                if (!fast) scanBufferRef.current = e.key;
+                else scanBufferRef.current += e.key;
+
+                lastKeyTimeRef.current = now;
+
+                // ✅ optional: prevent scanner chars appearing in focused inputs
+                if (isTypingField) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }
         };
 
-        window.addEventListener("keydown", handleKeydown);
-        return () => window.removeEventListener("keydown", handleKeydown);
+        // ✅ capture=true so we intercept Enter before form submit
+        window.addEventListener("keydown", handleKeydown, true);
+        return () => window.removeEventListener("keydown", handleKeydown, true);
     }, [handleBarcodeScan]);
 
     // ---------------- Totals ----------------
@@ -935,7 +956,7 @@ export default function AddSale({
         }
 
         form.post(route("sales.store"), {
-            onSuccess: () => router.visit(route("sales.index")),
+            // onSuccess: () => router.visit(route("sales.index")),
             onError: (errors) => {
                 console.error(errors);
                 alert(errors?.error || "Sale create failed. Check fields.");
@@ -1000,8 +1021,9 @@ export default function AddSale({
                                         <div className="relative">
                                             <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
                                             <input
+                                                ref={barcodeRef}
                                                 className="input input-bordered input-sm w-full md:w-64 pl-10"
-                                                placeholder="Search products..."
+                                                placeholder="Search products or scan barcode..."
                                                 value={search}
                                                 onChange={(e) => {
                                                     setSearch(e.target.value);

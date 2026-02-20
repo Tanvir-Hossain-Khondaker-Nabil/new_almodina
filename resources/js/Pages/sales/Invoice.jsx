@@ -47,14 +47,14 @@ export default function Invoice({ sale }) {
     [items]
   );
 
-  // ===== আল-মদিনা স্টোর Theme =====
+  // ===== Al Modina Theme =====
   const MB_DARK = "rgb(15, 45, 26)";
   const MB_LIGHT = "rgb(30, 77, 43)";
   const MB_GRADIENT =
     "linear-gradient(rgb(15, 45, 26) 0%, rgb(30, 77, 43) 100%)";
 
   // ======= Dynamic Header Data =======
-  const STORE_NAME = sale?.creator?.business?.name || "আল-মদিনা স্টোর";
+  const STORE_NAME = sale?.creator?.business?.name || "Al Modina";
   const OWNER_NAME = "প্রোঃ মোঃ সবুজ হোসেন";
   const STORE_NOTE =
     "এখানে বেবী ফুডস, মুদি মালামাল, কসমেটিকস সামগ্রী সুলভ মূল্যে ক্রয়-বিক্রয় করা হয়। বিশেষ অর্ডারে সকল ধরনের কেক পাওয়া যায় এবং অর্ডার নেয়া হয়।";
