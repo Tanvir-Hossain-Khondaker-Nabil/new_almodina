@@ -162,6 +162,9 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/add', 'createPos')->middleware('permission:sales.create')->name('sales.add');
         Route::post('/store', 'store')->middleware('permission:sales.create')->name('sales.store');
+        Route::post('/store/pos', 'storePos')
+            ->middleware('permission:sales.create')
+            ->name('salesPos.store');
         Route::post('/store/shadow', 'shadowStore')->middleware('permission:sales.create')->name('salesShadow.store');
 
         Route::get('/create', 'create')->middleware('permission:sales.create')->name('sales.create');

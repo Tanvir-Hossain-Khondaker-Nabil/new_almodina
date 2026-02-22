@@ -329,7 +329,7 @@ export default function Index({
                                                             </Link>
                                                         )}
                                                         <Link
-                                                            href={route("expenses.destroy", { id: expense.id })}
+                                                            href={route("expenses.del", { id: expense.id })}
                                                             onClick={(e) => {
                                                                 if (!confirm(t('expenses.confirm_delete', 'Are you sure you want to delete this expense?'))) {
                                                                     e.preventDefault();

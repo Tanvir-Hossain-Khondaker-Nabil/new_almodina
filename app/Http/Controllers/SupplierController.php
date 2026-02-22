@@ -14,6 +14,7 @@ use App\Services\SmsService;
 use Illuminate\Support\Facades\Log;
 use App\Models\Account;
 use App\Models\DillerShip;
+use App\Models\Purchase;
 
 class SupplierController extends Controller
 {
@@ -25,7 +26,6 @@ class SupplierController extends Controller
         $suppliers = Supplier::with(['purchases','dealership'])->when($filters['search'] ?? null, function ($query, $search) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('contact_person', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
                     ->orWhere('company', 'like', "%{$search}%")
                     ->orWhere('phone', 'like', "%{$search}%");
@@ -51,15 +51,50 @@ class SupplierController extends Controller
     {
         $validated = $request->validated();
 
-        $validated['created_by'] = Auth::id();
-        $account = Account::find($request->input('account_id'));
-        $dealership = DillerShip::find($request->input('dealership_id'));
-
-        if ($dealership) {
-            $validated['dealership_id'] = $dealership->id;
+        if ($request->type) {
+            $request->merge(['type' => 'global']);
+        } else {
+            $request->merge(['type' => 'local']);
         }
 
-        $supplier = Supplier::create($validated);
+
+        $account = null;
+
+        $validated['type'] = $request->type;
+        $validated['advance_amount'] = $validated['advance_amount'] ?? 0;
+        $validated['due_amount'] = $validated['due_amount'] ?? 0;
+        $validated['is_active'] = $validated['is_active'] ?? true;
+        $validated['created_by'] = Auth::id();
+
+
+        if ($request->advance_amount > 0) {
+
+            if ($request->account_id != null) {
+                $account = Account::find($request->account_id);
+
+                if ($request->advance_amount > $account->current_balance) {
+                    return redirect()->back()->with(['error' => 'Insufficient account balance for advance payment.']);
+                }
+            } else {
+                return redirect()->back()->with(['error' => 'Please select an account for advance payment.']);
+            }
+        }
+
+        $supplier =  Supplier::create($validated);
+
+        if ($request->due_amount > 0) {
+            Purchase::create([
+                'supplier_id' => $supplier->id,
+                'purchase_no' => 'ISD-' . Str::random(8),
+                'grand_total' => $request->due_amount,
+                'paid_amount' => 0,
+                'due_amount' => $request->due_amount ?? 0,
+                'status' => 'pending',
+                'created_by' => Auth::id(),
+                'purchase_date' => Carbon::now(),
+                'type' => $request->type
+            ]);
+        }
 
         // Send welcome SMS if requested
         $smsSent = false;
@@ -87,22 +122,22 @@ class SupplierController extends Controller
         }
 
         // if advance amount is given, create a payment record
-        if ($request->advance_amount && $request->advance_amount > 0 && $account) {
+        if ($account) {
+            $account->updateBalance($request->advance_amount, 'withdraw');
 
-            Payment::create([
-                'supplier_id' => $supplier->id ?? null,
-                'amount' => -$request->advance_amount ?? 0,
-                'shadow_amount' => 0,
-                'payment_method' => $account->type ?? 'Cash',
-                'txn_ref' => $request->input('transaction_id') ?? ('nexoryn-' . Str::random(10)),
-                'note' => 'Initial advance amount payment of supplier',
-                'paid_at' => Carbon::now(),
-                'created_by' => Auth::id(),
-                'account_id'  => $account->id ?? null,
-                'status' => 'completed'
-            ]);
-
-            $account->updateBalance($request->advance_amount ?? 0 , 'withdraw');
+            if ($request->advance_amount && $request->advance_amount > 0) {
+                Payment::create([
+                    'supplier_id'    => $supplier->id ?? null,
+                    'amount'         => ($request->advance_amount * -1) ?? 0,
+                    'shadow_amount'  => 0,
+                    'payment_method' => $account->type ?? 'Cash',
+                    'txn_ref'        => $request->input('transaction_id') ?? ('SAP-' . Str::random(8)),
+                    'note'           => 'Initial advance amount payment of supplier',
+                    'status'         => 'completed',
+                    'paid_at'        => Carbon::now(),
+                    'created_by'     => Auth::id()
+                ]);
+            }
         }
 
 
@@ -138,25 +173,22 @@ class SupplierController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'contact_person' => 'required|string|max:255',
             'email' => 'required|email',
             'phone' => 'required|string|max:20',
             'company' => 'nullable|string|max:255',
             'address' => 'nullable|string',
-            'website' => 'nullable|url',
             'advance_amount' => 'nullable|numeric|min:0',
             'due_amount' => 'nullable|numeric|min:0',
-            'is_active' => 'boolean',
-            'dealership_id' => 'nullable|exists:diller_ships,id'
+            'is_active' => 'boolean'
         ]);
 
-
-        $dealership = DillerShip::find($request->input('dealership_id'));
-
-        if ($dealership) {
-            $validated['dealership_id'] = $dealership->id;
+        if ($request->type) {
+            $request->merge(['type' => 'global']);
+        } else {
+            $request->merge(['type' => 'local']);
         }
 
+        $validated['type'] = $request->type;
         $supplier->update($validated);
 
         return redirect()->back()->with('success', 'Supplier contact updated successfully!');
@@ -196,7 +228,7 @@ class SupplierController extends Controller
         $totalPurchases = $supplier->purchases->count();
         $totalAmount = $supplier->purchases->sum('grand_total');
         $totalPaid = $supplier->purchases->sum('paid_amount');
-        $totalDue = $supplier->purchases->sum('due_amount');
+        $totalDue = $totalAmount - $totalPaid;
 
         return Inertia::render('Supplier/Show', [
             'supplier' => $supplier,
@@ -220,7 +252,6 @@ class SupplierController extends Controller
     public function getSmsPreview(Request $request)
     {
         $request->validate([
-            'contact_person' => 'required|string',
             'phone' => 'required|string',
             'email' => 'required|email',
             'company' => 'nullable|string',
@@ -228,7 +259,6 @@ class SupplierController extends Controller
         ]);
 
         $fakeSupplier = (object) [
-            'contact_person' => $request->contact_person,
             'phone' => $request->phone,
             'email' => $request->email,
             'company' => $request->company,
@@ -245,7 +275,6 @@ class SupplierController extends Controller
         $templateConfig = config("sms.templates.{$template}");
 
         $variables = [
-            'contact_person' => $fakeSupplier->contact_person,
             'company_name' => $fakeSupplier->company ?: config('app.name'),
             'email' => $fakeSupplier->email,
             'phone' => $fakeSupplier->phone,

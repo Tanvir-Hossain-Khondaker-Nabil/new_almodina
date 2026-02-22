@@ -21,13 +21,10 @@ import {
     Ruler,
     ChevronDown,
     Check,
-    Calculator,
     FileText,
     Calendar,
-    MessageSquare,
     AlertCircle,
     Percent,
-    Truck,
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 
@@ -36,6 +33,7 @@ export default function AddSale({
     productstocks = [],
     suppliers = [],
     accounts = [],
+    products = [],
     unitConversions = {
         weight: { ton: 1000, kg: 1, gram: 0.001, pound: 0.453592 },
         volume: { liter: 1, ml: 0.001 },
@@ -55,6 +53,10 @@ export default function AddSale({
     const [page, setPage] = useState(1);
     const pageSize = 8;
 
+    // Installment payment state
+    const [installmentDuration, setInstallmentDuration] = useState(0);
+    const [totalInstallments, setTotalInstallments] = useState(0);
+
     // Customer state
     const [customerId, setCustomerId] = useState("");
     const [customerName, setCustomerName] = useState("");
@@ -73,20 +75,19 @@ export default function AddSale({
     const [cart, setCart] = useState([]);
     const cartCount = cart.reduce((a, i) => a + n(i.qty), 0);
 
-    // Tax/Discount/Shipping
-    const [taxRate, setTaxRate] = useState(0);
-    const [discountValue, setDiscountValue] = useState(0);
-    const [shippingValue, setShippingValue] = useState(0);
+    // Tax/Discount
+    const [taxRate, setTaxRate] = useState(null);
+    const [discountValue, setDiscountValue] = useState(null);
 
     // Pickup state
     const [pickupItems, setPickupItems] = useState([]);
     const [showPickupModal, setShowPickupModal] = useState(false);
     const [selectedSupplier, setSelectedSupplier] = useState(null);
+    const [pickupVariantId, setPickupVariantId] = useState("");
+    const [pickupVariants, setPickupVariants] = useState([]);
 
     // Pickup form
     const [pickupProductName, setPickupProductName] = useState("");
-    const [pickupBrand, setPickupBrand] = useState("");
-    const [pickupVariant, setPickupVariant] = useState("");
     const [pickupQuantity, setPickupQuantity] = useState(1);
     const [pickupUnitPrice, setPickupUnitPrice] = useState(0);
     const [pickupSalePrice, setPickupSalePrice] = useState(0);
@@ -102,6 +103,8 @@ export default function AddSale({
     const [availableUnits, setAvailableUnits] = useState({});
     const [unitPrices, setUnitPrices] = useState({});
     const [basePrices, setBasePrices] = useState({});
+    const [pickupProductId, setPickupProductId] = useState("");
+    const [pickupSupplierId, setPickupSupplierId] = useState("");
 
     const dropdownRefs = useRef({});
 
@@ -159,18 +162,11 @@ export default function AddSale({
         [unitConversions]
     );
 
-    const calculatePriceInUnit = useCallback(
-        (priceInPurchaseUnit, fromUnit, toUnit, unitType) => {
-            if (fromUnit === toUnit) return priceInPurchaseUnit;
-
-            const conversions = unitConversions[unitType];
-            if (!conversions || !conversions[fromUnit] || !conversions[toUnit]) return priceInPurchaseUnit;
-
-            const pricePerBaseUnit = priceInPurchaseUnit / conversions[fromUnit];
-            return pricePerBaseUnit * conversions[toUnit];
-        },
-        [unitConversions]
-    );
+    const calculatePriceForUnit = useCallback((basePricePerBaseUnit, targetUnit, unitType) => {
+        const conversions = unitConversions[unitType];
+        if (!conversions || !conversions[targetUnit]) return basePricePerBaseUnit;
+        return basePricePerBaseUnit * conversions[targetUnit];
+    }, [unitConversions]);
 
     const calculateBasePricePerBaseUnit = useCallback(
         (price, unit, unitType) => {
@@ -247,7 +243,7 @@ export default function AddSale({
                 warehouse_id: s.warehouse_id,
                 product_unit_type: item.unit_type || "piece",
                 is_fraction_allowed: item.is_fraction_allowed || false,
-                sku: s.variant?.sku || null, // ✅ needed for scan
+                sku: s.variant?.sku || null,
             });
         }
 
@@ -315,8 +311,6 @@ export default function AddSale({
     }, [customerId, customers]);
 
     // ---------------- Cart Operations ----------------
-
-    // ✅ Hoisted function: avoids "Cannot access before initialization"
     function handleVariantSelect(product, variant) {
         addToCart(product, variant);
     }
@@ -340,26 +334,23 @@ export default function AddSale({
                 product.min_sale_unit || product.default_unit || availableUnitsForStock[0] || "piece";
             if (!availableUnitsForStock.includes(defaultUnit)) defaultUnit = availableUnitsForStock[0] || "piece";
 
+            const unitType = product.unit_type || "piece";
             let basePricePerBaseUnit = variant.sale_price;
-            if (product.unit_type && product.unit_type !== "piece") {
+
+            if (unitType !== "piece") {
                 basePricePerBaseUnit = calculateBasePricePerBaseUnit(
                     variant.sale_price,
                     variant.purchase_unit,
-                    product.unit_type
+                    unitType
                 );
             }
 
             let unitPrice = variant.sale_price;
-            if (
-                variant.purchase_unit !== defaultUnit &&
-                product.unit_type &&
-                product.unit_type !== "piece"
-            ) {
-                unitPrice = calculatePriceInUnit(
-                    variant.sale_price,
-                    variant.purchase_unit,
+            if (variant.purchase_unit !== defaultUnit && unitType !== "piece") {
+                unitPrice = calculatePriceForUnit(
+                    basePricePerBaseUnit,
                     defaultUnit,
-                    product.unit_type
+                    unitType
                 );
             }
 
@@ -378,7 +369,7 @@ export default function AddSale({
                 shadow_unit_price: n(variant.shadow_sale_price) || unitPrice,
                 maxQty: n(variant.quantity),
                 total_price: unitPrice,
-                product_unit_type: product.unit_type || "piece",
+                product_unit_type: unitType,
                 is_fraction_allowed: product.is_fraction_allowed || false,
                 original_purchase_unit: variant.purchase_unit,
                 original_sale_price: variant.sale_price,
@@ -395,7 +386,7 @@ export default function AddSale({
             setUnitPrices((prev) => ({ ...prev, [key]: unitPrice }));
             setBasePrices((prev) => ({ ...prev, [key]: basePricePerBaseUnit }));
         },
-        [cart, getAvailableUnitsForStock, calculateBasePricePerBaseUnit, calculatePriceInUnit]
+        [cart, getAvailableUnitsForStock, calculateBasePricePerBaseUnit, calculatePriceForUnit]
     );
 
     const removeCartItem = (key) => {
@@ -478,43 +469,53 @@ export default function AddSale({
         const oldUnit = selectedUnits[key] || item.unit;
         const oldQty = unitQuantities[key] || item.qty;
 
+        if (oldUnit === newUnit) return;
+
         const availableUnitsList = availableUnits[key] || [item.unit];
         if (!availableUnitsList.includes(newUnit)) {
             alert(`Cannot sell in ${newUnit.toUpperCase()} unit for this product`);
             return;
         }
 
-        let newPrice = item.unit_price;
-        if (item.product_unit_type && item.product_unit_type !== "piece") {
-            const basePricePerBaseUnit =
-                basePrices[key] || item.base_price_per_base_unit || item.original_sale_price;
-
-            const conversions = unitConversions[item.product_unit_type];
-            if (conversions && conversions[newUnit]) newPrice = basePricePerBaseUnit * conversions[newUnit];
-        }
+        const unitType = item.product_unit_type || "piece";
 
         let newQty = oldQty;
-        if (item.product_unit_type && item.product_unit_type !== "piece") {
-            newQty = convertUnitQuantity(oldQty, oldUnit, newUnit, item.product_unit_type);
+        if (unitType !== "piece") {
+            newQty = convertUnitQuantity(oldQty, oldUnit, newUnit, unitType);
 
-            const requestedBaseQty = convertToBase(newQty, newUnit, item.product_unit_type);
+            const requestedBaseQty = convertToBase(newQty, newUnit, unitType);
             if (requestedBaseQty > item.base_quantity) {
-                const availableInUnit = convertFromBase(item.base_quantity, newUnit, item.product_unit_type);
+                const availableInUnit = convertFromBase(item.base_quantity, newUnit, unitType);
                 alert(`Cannot change unit. Exceeds available stock! Available: ${availableInUnit.toFixed(3)} ${newUnit.toUpperCase()}`);
                 return;
             }
         }
 
+        const basePricePerBaseUnit =
+            basePrices[key] ||
+            item.base_price_per_base_unit ||
+            calculateBasePricePerBaseUnit(item.original_sale_price, item.original_purchase_unit, unitType);
+
+        const newPrice = calculatePriceForUnit(basePricePerBaseUnit, newUnit, unitType);
+
         setCart((prev) =>
             prev.map((x) => {
                 if (x.key !== key) return x;
-                return { ...x, unit: newUnit, qty: newQty, unit_price: newPrice, total_price: newQty * n(newPrice) };
+                return {
+                    ...x,
+                    unit: newUnit,
+                    qty: newQty,
+                    unit_price: newPrice,
+                    total_price: newQty * n(newPrice),
+                    base_price_per_base_unit: basePricePerBaseUnit
+                };
             })
         );
 
         setSelectedUnits((prev) => ({ ...prev, [key]: newUnit }));
         setUnitQuantities((prev) => ({ ...prev, [key]: newQty }));
         setUnitPrices((prev) => ({ ...prev, [key]: newPrice }));
+        setBasePrices((prev) => ({ ...prev, [key]: basePricePerBaseUnit }));
         setUnitDropdownOpen((prev) => ({ ...prev, [key]: false }));
     };
 
@@ -530,17 +531,9 @@ export default function AddSale({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // ---------------- Barcode Scanner (FIXED VERSION) ----------------
+    // ---------------- Barcode Scanner ----------------
     const barcodeRef = useRef(null);
-    const [barcodeValue, setBarcodeValue] = useState("");
     const [scanError, setScanError] = useState("");
-    const [autoFocusScanner, setAutoFocusScanner] = useState(false);
-
-    useEffect(() => {
-        if (!autoFocusScanner) return;
-        const t = setTimeout(() => barcodeRef.current?.focus(), 200);
-        return () => clearTimeout(t);
-    }, [autoFocusScanner]);
 
     const scanIndex = useMemo(() => {
         const batchMap = new Map();
@@ -596,75 +589,73 @@ export default function AddSale({
         [scanIndex, addToCart]
     );
 
-    // ✅ FIXED: Barcode scanning - only intercept when not focused on input field
-    const SCAN_TIMEOUT = 80; // little tighter helps scanners
-    const scanBufferRef = useRef("");
-    const lastKeyTimeRef = useRef(0);
+    const SCAN_TIMEOUT = 100;
+    const barcodeRefNew = useRef("");
+    const lastScanTimeRef = useRef(0);
 
     useEffect(() => {
         const handleKeydown = (e) => {
-            const tag = e.target.tagName;
+            const target = e.target;
+            const tag = target?.tagName;
+
             const isTypingField =
-                tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable;
+                tag === "INPUT" ||
+                tag === "TEXTAREA" ||
+                tag === "SELECT" ||
+                target?.isContentEditable;
+
+            if (isTypingField) return;
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
 
             const now = Date.now();
-            const fast = now - lastKeyTimeRef.current <= SCAN_TIMEOUT;
 
-            // scanning mode if keys are coming fast or buffer already started
-            const isScanningMode = fast || scanBufferRef.current.length > 0;
-
-            // Ignore modifier/navigation keys
-            if (
-                e.key === "Shift" ||
-                e.key === "Alt" ||
-                e.key === "Control" ||
-                e.key === "Meta" ||
-                e.key === "Tab" ||
-                e.key === "Escape" ||
-                e.key.startsWith("Arrow")
-            ) {
-                return;
-            }
-
-            // ENTER ends scan
             if (e.key === "Enter") {
-                if (scanBufferRef.current.length > 0) {
-                    // ✅ stop form submit + stop input default behaviors
+                if (barcodeRefNew.current.length > 0) {
                     e.preventDefault();
-                    e.stopPropagation();
-
-                    const scanned = scanBufferRef.current;
-                    scanBufferRef.current = "";
-                    lastKeyTimeRef.current = 0;
-
-                    handleBarcodeScan(scanned);
+                    handleBarcodeScan(barcodeRefNew.current);
+                    barcodeRefNew.current = "";
                 }
                 return;
             }
 
-            // only normal character keys
             if (e.key.length === 1) {
-                // If user typing normally in a field and not scanning, ignore
-                if (isTypingField && !isScanningMode) return;
-
-                // build buffer
-                if (!fast) scanBufferRef.current = e.key;
-                else scanBufferRef.current += e.key;
-
-                lastKeyTimeRef.current = now;
-
-                // ✅ optional: prevent scanner chars appearing in focused inputs
-                if (isTypingField) {
-                    e.preventDefault();
-                    e.stopPropagation();
+                if (now - lastScanTimeRef.current > SCAN_TIMEOUT) {
+                    barcodeRefNew.current = e.key;
+                } else {
+                    barcodeRefNew.current += e.key;
                 }
+                lastScanTimeRef.current = now;
             }
         };
 
-        // ✅ capture=true so we intercept Enter before form submit
-        window.addEventListener("keydown", handleKeydown, true);
-        return () => window.removeEventListener("keydown", handleKeydown, true);
+        window.addEventListener("keydown", handleKeydown, { passive: false });
+        return () => window.removeEventListener("keydown", handleKeydown);
     }, [handleBarcodeScan]);
+
+    // ---------------- Form ----------------
+    const form = useForm({
+        customer_id: null,
+        customer_name: null,
+        phone: null,
+        sale_date: saleDate,
+        notes: notes,
+        items: [],
+        vat_rate: 0,
+        discount_rate: 0,
+        flat_discount: 0,
+        paid_amount: 0,
+        grand_amount: 0,
+        due_amount: 0,
+        sub_amount: 0,
+        type: "pos",
+        pickup_items: [],
+        supplier_id: null,
+        account_id: "",
+        adjust_from_advance: false,
+        advance_adjustment: 0,
+        payment_status: "unpaid",
+        discount_type: 'flat_discount',
+    });
 
     // ---------------- Totals ----------------
     const subTotal = useMemo(() => cart.reduce((sum, i) => sum + n(i.total_price), 0), [cart]);
@@ -674,9 +665,18 @@ export default function AddSale({
     );
     const totalSubTotal = useMemo(() => subTotal + pickupSubTotal, [subTotal, pickupSubTotal]);
     const taxAmount = useMemo(() => (totalSubTotal * n(taxRate)) / 100, [totalSubTotal, taxRate]);
+    
+    const discountAmount = useMemo(() => {
+        if (form.data.discount_type === 'percentage') {
+            return (totalSubTotal * n(discountValue)) / 100;
+        } else {
+            return n(discountValue);
+        }
+    }, [totalSubTotal, discountValue, form.data.discount_type]);
+    
     const grandTotal = useMemo(
-        () => totalSubTotal + taxAmount - n(discountValue) + n(shippingValue),
-        [totalSubTotal, taxAmount, discountValue, shippingValue]
+        () => totalSubTotal + taxAmount - discountAmount,
+        [totalSubTotal, taxAmount, discountAmount]
     );
 
     useEffect(() => {
@@ -712,30 +712,18 @@ export default function AddSale({
 
     const dueAmount = useMemo(() => Math.max(0, grandTotal - n(paidAmount)), [grandTotal, paidAmount]);
 
-    // ---------------- Form ----------------
-    const form = useForm({
-        customer_id: null,
-        customer_name: null,
-        phone: null,
-        sale_date: saleDate,
-        notes: notes,
-        items: [],
-        vat_rate: 0,
-        discount_rate: 0,
-        paid_amount: 0,
-        grand_amount: 0,
-        due_amount: 0,
-        sub_amount: 0,
-        type: "pos",
-        pickup_items: [],
-        supplier_id: null,
-        account_id: "",
-        adjust_from_advance: false,
-        advance_adjustment: 0,
-        payment_status: "unpaid",
-    });
+    const handlePickupProductChange = (productId) => {
+        setPickupProductId(productId);
 
-    // ✅ Sync form data with UI states
+        const p = products?.find((x) => String(x.id) === String(productId));
+        setPickupProductName(p?.name || "");
+
+        const vars = p?.variants || [];
+        setPickupVariants(vars);
+        setPickupVariantId("");
+    };
+
+    // ---------------- Form Sync ----------------
     useEffect(() => {
         const formattedItems = cart.map((i) => ({
             product_id: i.product_id,
@@ -750,20 +738,28 @@ export default function AddSale({
             shadow_sell_price: n(i.shadow_unit_price),
         }));
 
-        const formattedPickupItems = pickupItems.map((i) => ({
-            product_name: i.product_name,
-            brand: i.brand,
-            variant: i.variant,
-            quantity: n(i.quantity),
-            unit_quantity: n(i.quantity),
-            unit: i.unit || "piece",
-            unit_price: n(i.unit_price),
-            sale_price: n(i.sale_price),
-            total_price: n(i.total_price),
-            supplier_id: selectedSupplier?.id || null,
+        const formattedPickupItems = pickupItems.map((item) => ({
+            pickup_product_id: item.pickup_product_id,
+            pickup_supplier_id: item.pickup_supplier_id,
+            variant_id: item.variant_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            sale_price: item.sale_price,
+            total_price: item.total_price,
         }));
-
+        
         const walkIn = !customerId && !customerName.trim() && !customerPhone.trim();
+
+        let discountRate = 0;
+        let flatDiscount = 0;
+        
+        if (form.data.discount_type === 'percentage') {
+            discountRate = n(discountValue);
+            flatDiscount = 0;
+        } else {
+            discountRate = 0;
+            flatDiscount = n(discountValue);
+        }
 
         form.setData({
             ...form.data,
@@ -778,33 +774,36 @@ export default function AddSale({
                 : customerId && customerId !== "01"
                     ? null
                     : customerPhone.trim() || null,
-
             items: formattedItems,
             pickup_items: formattedPickupItems,
-
             vat_rate: n(taxRate),
-            discount_rate: 0,
+            discount_rate: discountRate,
+            flat_discount: flatDiscount,
+            discount_type: form.data.discount_type,
             paid_amount: n(paidAmount),
             grand_amount: n(grandTotal),
             due_amount: n(dueAmount),
             sub_amount: n(totalSubTotal),
-
             account_id: selectedAccount || "",
             payment_status: paymentStatus,
             supplier_id: selectedSupplier?.id || null,
-
+            installment_duration: installmentDuration,
+            total_installments: totalInstallments,
             sale_date: saleDate,
             notes: notes,
             type: "pos",
         });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         cart,
         pickupItems,
+        installmentDuration,
+        totalInstallments,
         customerId,
         customerName,
         customerPhone,
         taxRate,
+        discountValue,
+        form.data.discount_type,
         totalSubTotal,
         grandTotal,
         paidAmount,
@@ -818,28 +817,40 @@ export default function AddSale({
 
     // ---------------- Pickup Functions ----------------
     const addPickupItem = () => {
-        if (!pickupProductName || n(pickupQuantity) <= 0 || n(pickupSalePrice) <= 0) {
-            alert("Please fill all required fields for pickup item");
+        if (!pickupProductId || !pickupSupplierId) {
+            alert("Please select product and supplier");
             return;
         }
+
+        if (!pickupVariantId) {
+            alert("Please select variant");
+            return;
+        }
+
+        const variantObj = pickupVariants?.find(
+            (v) => String(v.id) === String(pickupVariantId)
+        );
 
         const newItem = {
             id: Date.now(),
             product_name: pickupProductName,
-            brand: pickupBrand,
-            variant: pickupVariant,
-            quantity: n(pickupQuantity),
-            unit: "piece",
-            unit_price: n(pickupUnitPrice),
-            sale_price: n(pickupSalePrice),
-            total_price: n(pickupQuantity) * n(pickupSalePrice),
+            pickup_product_id: pickupProductId,
+            pickup_supplier_id: pickupSupplierId,
+            variant_id: pickupVariantId,
+            variant_label: variantObj?.sku || `Variant#${pickupVariantId}`,
+            quantity: Number(pickupQuantity),
+            unit_price: Number(pickupUnitPrice),
+            sale_price: Number(pickupSalePrice),
+            total_price: Number(pickupQuantity) * Number(pickupSalePrice),
         };
 
-        setPickupItems((prev) => [...prev, newItem]);
+        setPickupItems([...pickupItems, newItem]);
 
+        setPickupSupplierId("");
+        setPickupProductId("");
         setPickupProductName("");
-        setPickupBrand("");
-        setPickupVariant("");
+        setPickupVariants([]);
+        setPickupVariantId("");
         setPickupQuantity(1);
         setPickupUnitPrice(0);
         setPickupSalePrice(0);
@@ -858,14 +869,36 @@ export default function AddSale({
         if (status === "paid") {
             setPaidAmount(grandTotal);
             setPartialPayment(false);
+            setTotalInstallments(0);
+            setInstallmentDuration(0);
         } else if (status === "unpaid") {
             setPaidAmount(0);
             setPartialPayment(false);
-            setSelectedAccount("");
+            setTotalInstallments(0);
+            setInstallmentDuration(0);
         } else if (status === "partial") {
+            setPaidAmount(grandTotal / 2);
             setPartialPayment(true);
-            if (paidAmount === 0 || paidAmount >= grandTotal) setPaidAmount(grandTotal * 0.5);
+            setTotalInstallments(0);
+            setInstallmentDuration(0);
+        } else if (status === "installment") {
+            setPaidAmount(grandTotal / 3);
+            setPartialPayment(false);
+            setTotalInstallments(3);
+            setInstallmentDuration(3);
         }
+    };
+
+    const handleTotalInstallmentsInput = (e) => {
+        const value = parseInt(e.target.value) || 0;
+        setTotalInstallments(value);
+        form.setData("total_installments", value);
+    };
+
+    const handleInstallmentDurationInput = (e) => {
+        const value = parseInt(e.target.value) || 0;
+        setInstallmentDuration(value);
+        form.setData("installment_duration", value);
     };
 
     const handlePaidAmountChange = (value) => {
@@ -925,16 +958,12 @@ export default function AddSale({
         if (paymentStatus !== "unpaid" && !selectedAccount)
             return alert("Select a payment account for payment");
 
-        // If typed name/phone, require both (unless walk-in fully empty)
         const hasOne =
             (!!customerName.trim() && !customerPhone.trim()) ||
             (!customerName.trim() && !!customerPhone.trim());
         if (!customerId && hasOne)
-            return alert(
-                "If you type customer info, provide both Name and Phone. Otherwise keep walk-in empty."
-            );
+            return alert("If you type customer info, provide both Name and Phone. Otherwise keep walk-in empty.");
 
-        // Validate stock (base units)
         const outOfStockItems = cart.filter((item) => {
             const selectedUnit = selectedUnits[item.key] || item.unit;
             if (item.product_unit_type && item.product_unit_type !== "piece") {
@@ -955,8 +984,18 @@ export default function AddSale({
             return;
         }
 
-        form.post(route("sales.store"), {
-            // onSuccess: () => router.visit(route("sales.index")),
+        if (paymentStatus === "installment") {
+            if (!totalInstallments || totalInstallments <= 0) {
+                alert("Please enter total installments for installment payment");
+                return;
+            }
+            if (!installmentDuration || installmentDuration <= 0) {
+                alert("Please enter installment duration");
+                return;
+            }
+        }
+
+        form.post(route("salesPos.store"), {
             onError: (errors) => {
                 console.error(errors);
                 alert(errors?.error || "Sale create failed. Check fields.");
@@ -968,7 +1007,7 @@ export default function AddSale({
     return (
         <div className="bg-white rounded-box p-5">
             <PageHeader title="POS Checkout" subtitle="Create sale with modern POS layout">
-                <button onClick={() => router.visit(route("sales.index"))} className="btn btn-sm btn-ghost">
+                <button onClick={() => router.visit(route("salesPos.index"))} className="btn btn-sm btn-ghost">
                     <ArrowLeft size={15} /> Back
                 </button>
             </PageHeader>
@@ -981,8 +1020,7 @@ export default function AddSale({
                             <div className="card-body p-4">
                                 <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
                                     <div>
-                                        <h2 className="text-xl font-bold text-gray-800">Product Catalog</h2>
-                                        <p className="text-sm text-gray-600">Browse and add products to cart</p>
+                                        <h2 className="text-xl font-bold text-gray-800">Product</h2>
                                     </div>
 
                                     <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
@@ -1071,16 +1109,12 @@ export default function AddSale({
                                                         src="/media/uploads/logo.png"
                                                         alt={p.name}
                                                         className="h-full w-full object-contain p-4 opacity-50"
-                                                        onError={(e) => {
-                                                            e.currentTarget.onerror = null;
-                                                            e.currentTarget.src = "/media/uploads/logo.png";
-                                                        }}
                                                     />
                                                 )}
                                             </figure>
 
                                             <div className="card-body p-4">
-                                                <h3 className="card-title text-sm font-semibold text-gray-800 line-clamp-2 h-10">
+                                                <h3 className="card-title text-sm font-semibold text-gray-800 line-clamp-2">
                                                     {p.name}
                                                 </h3>
 
@@ -1096,7 +1130,7 @@ export default function AddSale({
                                                     </div>
                                                 </div>
 
-                                                <div className="flex items-center justify-between mt-2">
+                                                <div className="flex items-center justify-between">
                                                     <div>
                                                         <div className="text-lg font-bold text-primary">
                                                             {money(p.minPrice ?? 0)}
@@ -1107,7 +1141,6 @@ export default function AddSale({
                                                         </div>
                                                     </div>
 
-                                                    {/* Variant dropdown */}
                                                     <div className="dropdown dropdown-end">
                                                         <button
                                                             type="button"
@@ -1197,147 +1230,10 @@ export default function AddSale({
                     {/* RIGHT COLUMN - Checkout */}
                     <div className="lg:col-span-4">
                         <div className="space-y-6">
-                            {/* Order Info */}
-                            <div className="card border border-gray-200 rounded-2xl shadow-sm">
-                                <div className="card-body p-4">
-                                    <h2 className="text-lg font-bold flex items-center gap-2 mb-4 text-gray-800">
-                                        <FileText size={20} /> Order Information
-                                    </h2>
-
-                                    <div className="space-y-4">
-                                        {/* Sale Date */}
-                                        <div className="form-control">
-                                            <label className="label py-1">
-                                                <span className="label-text flex items-center gap-2">
-                                                    <Calendar size={14} /> Sale Date
-                                                </span>
-                                            </label>
-                                            <input
-                                                type="date"
-                                                className="input input-bordered"
-                                                value={saleDate}
-                                                onChange={(e) => setSaleDate(e.target.value)}
-                                            />
-                                        </div>
-
-                                        {/* Customer */}
-                                        <div className="form-control">
-                                            <label className="label py-1">
-                                                <span className="label-text flex items-center gap-2">
-                                                    <User size={14} /> Customer
-                                                </span>
-                                            </label>
-                                            <select
-                                                className="select select-bordered"
-                                                value={customerId}
-                                                onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    setCustomerId(val);
-                                                    setShowManualCustomerFields(val === "01");
-                                                }}
-                                            >
-                                                <option value="">Walk In Customer</option>
-                                                <option value="01">+ Add New Customer</option>
-                                                {customers.map((c) => (
-                                                    <option key={c.id} value={c.id}>
-                                                        {c.customer_name} ({c.phone})
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        {/* Manual customer */}
-                                        {showManualCustomerFields && (
-                                            <div className="space-y-3 bg-gray-50 p-3 rounded-lg border">
-                                                <div className="form-control">
-                                                    <label className="label py-1">
-                                                        <span className="label-text">Customer Name *</span>
-                                                    </label>
-                                                    <input
-                                                        className="input input-bordered"
-                                                        placeholder="Enter customer name"
-                                                        value={customerName}
-                                                        onChange={(e) => setCustomerName(e.target.value)}
-                                                        required
-                                                    />
-                                                </div>
-
-                                                <div className="form-control">
-                                                    <label className="label py-1">
-                                                        <span className="label-text">Phone Number *</span>
-                                                    </label>
-                                                    <input
-                                                        className="input input-bordered"
-                                                        placeholder="Enter phone number"
-                                                        value={customerPhone}
-                                                        onChange={(e) => setCustomerPhone(e.target.value)}
-                                                        required
-                                                    />
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Selected Customer info */}
-                                        {selectedCustomer && (
-                                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <div className="font-medium text-blue-800">
-                                                            {selectedCustomer.customer_name}
-                                                        </div>
-                                                        <div className="text-sm text-blue-600">{selectedCustomer.phone}</div>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setCustomerId("");
-                                                            setSelectedCustomer(null);
-                                                            setCustomerName("");
-                                                            setCustomerPhone("");
-                                                        }}
-                                                        className="btn btn-xs btn-ghost text-blue-600"
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Notes */}
-                                        <div className="form-control">
-                                            <label className="label py-1">
-                                                <span className="label-text flex items-center gap-2">
-                                                    <MessageSquare size={14} /> Notes
-                                                </span>
-                                            </label>
-                                            <textarea
-                                                className="textarea textarea-bordered"
-                                                rows="2"
-                                                value={notes}
-                                                onChange={(e) => setNotes(e.target.value)}
-                                                placeholder="Additional notes..."
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
                             {/* Checkout Summary */}
                             <div className="card border border-gray-200 rounded-2xl shadow-sm">
                                 <div className="card-body p-0">
-                                    <div className="px-4 py-3 border-b bg-gray-50 rounded-t-2xl">
-                                        <div className="flex items-center justify-between">
-                                            <h2 className="text-lg font-bold text-gray-800">Checkout Summary</h2>
-                                            <div className="flex items-center gap-2">
-                                                <span className="badge badge-primary">{cartCount + pickupItems.length} items</span>
-                                                {pickupItems.length > 0 && (
-                                                    <span className="badge badge-warning">{pickupItems.length} pickup</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-4">
+                                    <div className="p-2">
                                         {!cart.length && !pickupItems.length ? (
                                             <div className="py-12 text-center bg-white">
                                                 <Package size={48} className="mx-auto text-gray-300 mb-3" />
@@ -1354,7 +1250,6 @@ export default function AddSale({
                                                     const selectedUnit = selectedUnits[i.key] || i.unit || "piece";
                                                     const unitQuantity = unitQuantities[i.key] || i.qty || 1;
                                                     const unitPrice = unitPrices[i.key] || i.unit_price;
-                                                    const basePricePerBaseUnit = basePrices[i.key] || i.base_price_per_base_unit;
 
                                                     return (
                                                         <div
@@ -1369,7 +1264,6 @@ export default function AddSale({
                                                                         {i.batch_no && ` • ${i.batch_no}`}
                                                                     </div>
 
-                                                                    {/* Unit selector */}
                                                                     {availableUnitsList.length > 1 && (
                                                                         <div
                                                                             className="mt-2 relative"
@@ -1409,7 +1303,6 @@ export default function AddSale({
                                                                         </div>
                                                                     )}
 
-                                                                    {/* Qty controls */}
                                                                     <div className="mt-2 flex items-center gap-2">
                                                                         <button
                                                                             type="button"
@@ -1429,7 +1322,7 @@ export default function AddSale({
                                                                         <button
                                                                             type="button"
                                                                             className="btn btn-xs btn-square btn-outline border-gray-300 hover:bg-gray-100"
-                                                                            onClick={() => changeQty(i.key, n(i.qty) + 1)}
+                                                                            onClick={() => changeQty(i.key, n(i.qty) + (i.is_fraction_allowed ? 0.001 : 1))}
                                                                         >
                                                                             <Plus size={12} className="text-gray-700" />
                                                                         </button>
@@ -1439,37 +1332,6 @@ export default function AddSale({
                                                                         Available: {formatCurrency(i.maxQty)}{" "}
                                                                         {i.original_purchase_unit?.toUpperCase()}
                                                                     </div>
-
-                                                                    {/* Unit info for non-piece */}
-                                                                    {i.product_unit_type && i.product_unit_type !== "piece" && (
-                                                                        <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs min-w-[200px]">
-                                                                            <div className="text-blue-800">
-                                                                                <div className="flex items-center gap-1 mb-1">
-                                                                                    <Calculator size={10} />
-                                                                                    <strong>Unit Information</strong>
-                                                                                </div>
-                                                                                <div className="grid grid-cols-2 gap-1">
-                                                                                    <div>Base Price:</div>
-                                                                                    <div className="font-medium">
-                                                                                        {money(basePricePerBaseUnit || i.original_sale_price)}/base
-                                                                                    </div>
-
-                                                                                    <div>Sale Price:</div>
-                                                                                    <div className="font-medium">
-                                                                                        {money(unitPrice)} / {selectedUnit.toUpperCase()}
-                                                                                    </div>
-
-                                                                                    <div>Available:</div>
-                                                                                    <div>
-                                                                                        {formatCurrency(
-                                                                                            convertFromBase(i.base_quantity, selectedUnit, i.product_unit_type)
-                                                                                        )}{" "}
-                                                                                        {selectedUnit.toUpperCase()}
-                                                                                    </div>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
                                                                 </div>
 
                                                                 <div className="text-right">
@@ -1479,7 +1341,7 @@ export default function AddSale({
                                                                     </div>
                                                                     <button
                                                                         type="button"
-                                                                        className="btn btn-ghost btn-xs text-red-600 hover:text-red-700 hover:bg-red-50 mt-2"
+                                                                        className="btn btn-ghost btn-xs mt-10 text-red-600 hover:text-red-700 hover:bg-red-50 me-1"
                                                                         onClick={() => removeCartItem(i.key)}
                                                                     >
                                                                         <Trash2 size={12} />
@@ -1501,10 +1363,6 @@ export default function AddSale({
                                                                 <div className="font-semibold text-gray-900 flex items-center gap-1">
                                                                     <ShoppingBag size={12} className="text-orange-500" />
                                                                     {item.product_name}
-                                                                </div>
-                                                                <div className="text-xs text-gray-600 mt-1">
-                                                                    {item.brand && `Brand: ${item.brand}`}
-                                                                    {item.variant && ` • ${item.variant}`}
                                                                 </div>
                                                                 <div className="text-xs text-gray-600 mt-1">
                                                                     Qty: <span className="font-medium">{item.quantity}</span> ×{" "}
@@ -1531,22 +1389,20 @@ export default function AddSale({
                                         )}
 
                                         {/* Add pickup */}
-                                        {cart.length > 0 && (
-                                            <div className="mt-4 px-4 pb-4">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowPickupModal(true)}
-                                                    className="btn btn-outline w-full btn-sm"
-                                                >
-                                                    <Plus size={14} className="mr-2" />
-                                                    Add Pickup Item
-                                                </button>
-                                            </div>
-                                        )}
+                                        <div className="mt-4 px-4 pb-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPickupModal(true)}
+                                                className="btn btn-outline w-full btn-sm"
+                                            >
+                                                <Plus size={14} className="mr-2" />
+                                                Add Pickup Item
+                                            </button>
+                                        </div>
                                     </div>
 
                                     {/* Totals */}
-                                    <div className="px-4 py-3 border-t bg-gray-50">
+                                    <div className="px-2 py-3 border-t bg-gray-50">
                                         <div className="space-y-2 mb-3">
                                             <div className="flex justify-between items-center">
                                                 <span className="text-gray-600">Stock Items:</span>
@@ -1568,6 +1424,7 @@ export default function AddSale({
                                             </div>
                                         </div>
 
+                                        {/* Tax and Discount Section */}
                                         <div className="grid grid-cols-2 gap-2 mb-3">
                                             <div className="form-control">
                                                 <label className="label py-1">
@@ -1589,37 +1446,57 @@ export default function AddSale({
                                             <div className="form-control">
                                                 <label className="label py-1">
                                                     <span className="label-text text-xs flex items-center gap-1">
-                                                        <CreditCard size={10} /> Discount
+                                                        <CreditCard size={10} /> Discount Type
                                                     </span>
                                                 </label>
-                                                <input
-                                                    type="number"
-                                                    className="input input-bordered input-sm"
-                                                    value={discountValue}
-                                                    onChange={(e) => setDiscountValue(n(e.target.value))}
-                                                    placeholder="0"
-                                                    min="0"
-                                                    step="0.01"
-                                                />
+                                                <select
+                                                    className="select select-bordered select-sm"
+                                                    value={form.data.discount_type}
+                                                    onChange={(e) => form.setData('discount_type', e.target.value)}
+                                                >
+                                                    <option value="flat_discount">Flat Discount</option>
+                                                    <option value="percentage">Percentage</option>
+                                                </select>
                                             </div>
                                         </div>
 
-                                        <div className="form-control">
+                                        <div className="form-control mb-3">
                                             <label className="label py-1">
                                                 <span className="label-text text-xs flex items-center gap-1">
-                                                    <Truck size={10} /> Shipping
+                                                    <Percent size={10} /> 
+                                                    {form.data.discount_type === 'percentage' ? 'Discount Percentage' : 'Discount Amount'}
                                                 </span>
                                             </label>
                                             <input
                                                 type="number"
                                                 className="input input-bordered input-sm"
-                                                value={shippingValue}
-                                                onChange={(e) => setShippingValue(n(e.target.value))}
-                                                placeholder="0"
-                                                min="0"
-                                                step="0.01"
+                                                value={discountValue}
+                                                onChange={(e) => setDiscountValue(n(e.target.value))}
+                                                placeholder={form.data.discount_type === 'percentage' ? 'Enter discount %' : 'Enter discount amount'}
+                                                // min="0"
+                                                // step={form.data.discount_type === 'percentage' ? "0.1" : "0.01"}
                                             />
                                         </div>
+
+                                        {discountValue > 0 && (
+                                            <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded-lg mb-3">
+                                                {form.data.discount_type === 'percentage' ? (
+                                                    <div className="flex justify-between">
+                                                        <span>Discount ({discountValue}%):</span>
+                                                        <span className="font-semibold text-green-600">
+                                                            -{money((totalSubTotal * discountValue) / 100)}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex justify-between">
+                                                        <span>Flat Discount:</span>
+                                                        <span className="font-semibold text-green-600">
+                                                            -{money(discountValue)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
 
                                         <div className="mt-3 pt-3 border-t">
                                             <div className="flex justify-between items-center text-lg font-bold">
@@ -1631,46 +1508,139 @@ export default function AddSale({
                                 </div>
                             </div>
 
-                            {/* Payment */}
-                            <div className="card border border-gray-800 bg-[#1e4d2b] text-white rounded-2xl shadow-lg">
+                            {/* Order Info */}
+                            <div className="card border border-gray-200 rounded-2xl shadow-sm">
                                 <div className="card-body p-4">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="text-lg font-bold flex items-center gap-2">
-                                            <CreditCard size={20} /> Payment Details
+                                    <h2 className="text-lg font-bold flex items-center gap-2 mb-4 text-gray-800">
+                                        <FileText size={20} /> Order Information
+                                    </h2>
+
+                                    <div className="space-y-4">
+                                        <div className="form-control">
+                                            <label className="label py-1">
+                                                <span className="label-text flex items-center gap-2">
+                                                    <Calendar size={14} /> Sale Date
+                                                </span>
+                                            </label>
+                                            <input
+                                                type="date"
+                                                className="input input-bordered"
+                                                value={saleDate}
+                                                onChange={(e) => setSaleDate(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="form-control">
+                                            <label className="label py-1">
+                                                <span className="label-text flex items-center gap-2">
+                                                    <User size={14} /> Customer
+                                                </span>
+                                            </label>
+                                            <select
+                                                className="select select-bordered"
+                                                value={customerId}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setCustomerId(val);
+                                                    setShowManualCustomerFields(val === "01");
+                                                }}
+                                            >
+                                                <option value="">Walk In Customer</option>
+                                                <option value="01">+ Add New Customer</option>
+                                                {customers.map((c) => (
+                                                    <option key={c.id} value={c.id}>
+                                                        {c.customer_name} ({c.phone})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {showManualCustomerFields && (
+                                            <div className="space-y-3 bg-gray-50 p-3 rounded-lg border">
+                                                <div className="form-control">
+                                                    <label className="label py-1">
+                                                        <span className="label-text">Customer Name *</span>
+                                                    </label>
+                                                    <input
+                                                        className="input input-bordered"
+                                                        placeholder="Enter customer name"
+                                                        value={customerName}
+                                                        onChange={(e) => setCustomerName(e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+
+                                                <div className="form-control">
+                                                    <label className="label py-1">
+                                                        <span className="label-text">Phone Number *</span>
+                                                    </label>
+                                                    <input
+                                                        className="input input-bordered"
+                                                        placeholder="Enter phone number"
+                                                        value={customerPhone}
+                                                        onChange={(e) => setCustomerPhone(e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {selectedCustomer && (
+                                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <div className="font-medium text-blue-800">
+                                                            {selectedCustomer.customer_name}
+                                                        </div>
+                                                        <div className="text-sm text-blue-600">{selectedCustomer.phone}</div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setCustomerId("");
+                                                            setSelectedCustomer(null);
+                                                            setCustomerName("");
+                                                            setCustomerPhone("");
+                                                        }}
+                                                        className="btn btn-xs btn-ghost text-blue-600"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Payment */}
+                            <div className="card bg-white border border-gray-200 rounded-xl shadow-sm">
+                                <div className="card-body p-3">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                                            <CreditCard size={16} className="text-green-600" />
+                                            Payment
                                         </h3>
 
                                         <button
                                             type="button"
                                             onClick={manualPaymentOverride ? disableManualPaymentOverride : enableManualPaymentOverride}
-                                            className="btn btn-xs bg-red-600 hover:bg-red-700 border-none text-white font-bold"
+                                            className="btn btn-xs bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300"
                                         >
                                             {manualPaymentOverride ? <X size={12} /> : <Edit size={12} />}
                                             {manualPaymentOverride ? "Cancel" : "Manual"}
                                         </button>
                                     </div>
 
-                                    <div className="space-y-4">
+                                    <div className="space-y-3">
                                         <div className="form-control">
-                                            <label className="label py-1">
-                                                <span className="label-text text-sm text-gray-300">Payment Status *</span>
+                                            <label className="label py-0">
+                                                <span className="label-text text-xs text-gray-600 font-semibold">
+                                                    Payment Account *
+                                                </span>
                                             </label>
                                             <select
-                                                className="select select-bordered select-sm w-full bg-gray-800 border-gray-700 text-white"
-                                                value={paymentStatus}
-                                                onChange={(e) => handlePaymentStatusChange(e.target.value)}
-                                            >
-                                                <option value="unpaid">Unpaid</option>
-                                                <option value="partial">Partial</option>
-                                                <option value="paid">Paid</option>
-                                            </select>
-                                        </div>
-
-                                        <div className="form-control">
-                                            <label className="label py-1">
-                                                <span className="label-text text-sm text-gray-300">Payment Account *</span>
-                                            </label>
-                                            <select
-                                                className="select select-bordered select-sm w-full bg-gray-800 border-gray-700 text-white"
+                                                className="select select-bordered select-sm w-full bg-white border-gray-300 text-gray-800"
                                                 value={selectedAccount}
                                                 onChange={(e) => setSelectedAccount(e.target.value)}
                                                 required={paymentStatus !== "unpaid"}
@@ -1685,55 +1655,121 @@ export default function AddSale({
                                             </select>
 
                                             {isAccountDisabled && (
-                                                <div className="text-xs text-gray-300 mt-1">
-                                                    Account selection is disabled for unpaid status
-                                                </div>
+                                                <p className="text-[11px] text-gray-500 mt-1">
+                                                    Account disabled for unpaid status
+                                                </p>
                                             )}
                                         </div>
 
                                         {selectedAccountObj && !isAccountDisabled && (
-                                            <div className="p-3 bg-gray-800 rounded-lg border border-gray-700">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
+                                            <div className="p-2 rounded-lg bg-gray-50 border border-gray-200">
+                                                <div className="flex justify-between items-center text-xs">
+                                                    <div className="flex items-center gap-2 text-gray-700">
                                                         {getAccountIcon(selectedAccountObj.type)}
                                                         <span className="font-medium">{selectedAccountObj.name}</span>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <div className="text-xs text-gray-400">Balance</div>
-                                                        <div className="text-sm font-bold">৳ {formatCurrency(selectedAccountObj.current_balance)}</div>
+                                                    <span className="font-semibold">
+                                                        ৳ {formatCurrency(selectedAccountObj.current_balance)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="form-control">
+                                                <label className="label py-0">
+                                                    <span className="label-text text-xs text-gray-600 font-semibold">
+                                                        Payment Status *
+                                                    </span>
+                                                </label>
+                                                <select
+                                                    className="select select-bordered select-sm w-full bg-white border-gray-300 text-gray-800"
+                                                    value={paymentStatus}
+                                                    onChange={(e) => handlePaymentStatusChange(e.target.value)}
+                                                >
+                                                    <option value="unpaid">Unpaid</option>
+                                                    <option value="partial">Partial</option>
+                                                    <option value="paid">Paid</option>
+                                                    <option value="installment">Installment</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="form-control">
+                                                <label className="label py-0">
+                                                    <span className="label-text text-xs text-gray-600 font-semibold">
+                                                        Paid Amount
+                                                    </span>
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="input input-bordered input-sm w-full bg-white border-gray-300 text-gray-800"
+                                                    value={paidAmount}
+                                                    onChange={(e) => handlePaidAmountChange(e.target.value)}
+                                                    disabled={!manualPaymentOverride && paymentStatus === "unpaid"}
+                                                    min={0}
+                                                    max={grandTotal}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {paymentStatus === 'installment' && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                                <div className="md:col-span-1">
+                                                    <div className="form-control">
+                                                        <label className="label py-0">
+                                                            <span className="label-text text-[10px] text-gray-500 uppercase font-bold tracking-widest">
+                                                                Total Installments *
+                                                            </span>
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            className="input input-bordered input-sm w-full bg-white border-gray-300 font-mono"
+                                                            value={totalInstallments}
+                                                            onChange={handleTotalInstallmentsInput}
+                                                            onFocus={(e) => e.target.select()}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="md:col-span-1">
+                                                    <div className="form-control">
+                                                        <label className="label py-0">
+                                                            <span className="label-text text-[10px] text-gray-500 uppercase font-bold tracking-widest">
+                                                                Duration (Months) *
+                                                            </span>
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            className="input input-bordered input-sm w-full bg-white border-gray-300 font-mono"
+                                                            value={installmentDuration}
+                                                            onChange={handleInstallmentDurationInput}
+                                                            onFocus={(e) => e.target.select()}
+                                                        />
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
 
-                                        <div className="form-control">
-                                            <label className="label py-1">
-                                                <span className="label-text text-sm text-gray-300">Paid Amount</span>
-                                            </label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                className="input input-bordered input-sm w-full bg-gray-800 border-gray-700 text-white"
-                                                value={paidAmount}
-                                                onChange={(e) => handlePaidAmountChange(e.target.value)}
-                                                disabled={!manualPaymentOverride && paymentStatus === "unpaid"}
-                                                min={0}
-                                                max={grandTotal}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2 pt-3 border-t border-gray-700">
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-gray-300">Grand Total:</span>
-                                                <span className="font-bold">{money(grandTotal)}</span>
+                                        <div className="pt-2 border-t border-gray-200 space-y-1 text-xs">
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-500">Total</span>
+                                                <span className="font-semibold">{money(grandTotal)}</span>
                                             </div>
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-gray-300">Paid Amount:</span>
-                                                <span className="font-bold text-green-300">{money(paidAmount)}</span>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-500">Paid</span>
+                                                <span className="font-semibold text-green-600">
+                                                    {money(paidAmount)}
+                                                </span>
                                             </div>
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-gray-300">Due Amount:</span>
-                                                <span className={`font-bold ${dueAmount > 0 ? "text-red-300" : "text-green-300"}`}>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-500">Due</span>
+                                                <span
+                                                    className={`font-semibold ${dueAmount > 0 ? "text-red-600" : "text-green-600"
+                                                        }`}
+                                                >
                                                     {money(dueAmount)}
                                                 </span>
                                             </div>
@@ -1763,7 +1799,7 @@ export default function AddSale({
                                     )}
                                 </button>
 
-                                <button type="button" className="btn btn-outline w-full" onClick={() => router.visit(route("sales.index"))}>
+                                <button type="button" className="btn btn-outline w-full" onClick={() => router.visit(route("salesPos.index"))}>
                                     Cancel
                                 </button>
                             </div>
@@ -1803,47 +1839,65 @@ export default function AddSale({
                         <div className="space-y-4">
                             <div className="form-control">
                                 <label className="label">
-                                    <span className="label-text">Product Name *</span>
+                                    <span className="label-text">Pickup Product *</span>
                                 </label>
-                                <input
-                                    type="text"
-                                    className="input input-bordered"
-                                    value={pickupProductName}
-                                    onChange={(e) => setPickupProductName(e.target.value)}
-                                    placeholder="Enter product name"
+                                <select
+                                    value={pickupProductId}
+                                    onChange={(e) => handlePickupProductChange(e.target.value)}
+                                    className="select select-bordered"
                                     required
-                                />
+                                >
+                                    <option value="">Select Product</option>
+                                    {products.map((product) => (
+                                        <option key={product.id} value={product.id}>
+                                            {product.name}({product.product_no}) [{product.unit_type} unit]
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">Brand</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        className="input input-bordered"
-                                        value={pickupBrand}
-                                        onChange={(e) => setPickupBrand(e.target.value)}
-                                        placeholder="Enter brand"
-                                    />
-                                </div>
-
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">Variant</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        className="input input-bordered"
-                                        value={pickupVariant}
-                                        onChange={(e) => setPickupVariant(e.target.value)}
-                                        placeholder="Enter variant"
-                                    />
-                                </div>
+                            <div className="form-control">
+                                <label className="label">
+                                    <span className="label-text">Pickup Variant *</span>
+                                </label>
+                                <select
+                                    value={pickupVariantId}
+                                    onChange={(e) => setPickupVariantId(e.target.value)}
+                                    className="select select-bordered"
+                                    required
+                                    disabled={!pickupProductId || pickupVariants.length === 0}
+                                >
+                                    <option value="">
+                                        {pickupProductId ? "Select Variant" : "Select Product First"}
+                                    </option>
+                                    {pickupVariants?.map((v) => (
+                                        <option key={v.id} value={v.id}>
+                                            {v.sku || `Variant#${v.id}`}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="form-control">
+                                <label className="label">
+                                    <span className="label-text">Pickup Supplier *</span>
+                                </label>
+                                <select
+                                    value={pickupSupplierId}
+                                    onChange={(e) => setPickupSupplierId(e.target.value)}
+                                    className="select select-bordered"
+                                    required
+                                >
+                                    <option value="">Select Supplier</option>
+                                    {suppliers.map((supplier) => (
+                                        <option key={supplier.id} value={supplier.id}>
+                                            {supplier.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
                                 <div className="form-control">
                                     <label className="label">
                                         <span className="label-text">Quantity *</span>
@@ -1860,6 +1914,23 @@ export default function AddSale({
 
                                 <div className="form-control">
                                     <label className="label">
+                                        <span className="label-text">Cost Price *</span>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        className="input input-bordered"
+                                        value={pickupUnitPrice}
+                                        onChange={(e) => setPickupUnitPrice(e.target.value)}
+                                        min="0"
+                                        step="0.01"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="form-control">
+                                    <label className="label">
                                         <span className="label-text">Sale Price (৳) *</span>
                                     </label>
                                     <input
@@ -1873,14 +1944,14 @@ export default function AddSale({
                                         required
                                     />
                                 </div>
-                            </div>
 
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">Total Amount</span>
-                                </label>
-                                <div className="input input-bordered bg-gray-100 font-bold text-center">
-                                    ৳ {formatCurrency(n(pickupQuantity) * n(pickupSalePrice))}
+                                <div className="form-control">
+                                    <label className="label">
+                                        <span className="label-text">Total Amount</span>
+                                    </label>
+                                    <div className="input input-bordered bg-gray-100 font-bold text-center">
+                                        ৳ {formatCurrency(n(pickupQuantity) * n(pickupSalePrice))}
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -33,7 +33,8 @@ class PurchaseReturn extends Model
         'payment_type',
         'replacement_total',  // Make sure this is here
         'shadow_replacement_total'  // Make sure this is here
-        , 'outlet_id'
+        ,
+        'outlet_id'
     ];
 
     protected $casts = [
@@ -124,5 +125,14 @@ class PurchaseReturn extends Model
     public function canBeCompleted()
     {
         return $this->status === 'approved';
+    }
+    public function approver()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function completer()
+    {
+        return $this->belongsTo(User::class, 'completed_by');
     }
 }

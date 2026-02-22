@@ -1,29 +1,50 @@
-import React, { useState, useEffect } from "react";
+import { Link, router, useForm, usePage } from "@inertiajs/react";
+import axios from "axios";
+import {
+    AlertCircle,
+    AlertTriangle,
+    Calendar,
+    CheckCircle,
+    ChevronRight,
+    CreditCard,
+    DollarSign,
+    Edit,
+    Eye,
+    FileText,
+    Frown,
+    Info,
+    Landmark,
+    Mail,
+    MapPin,
+    Percent,
+    Phone,
+    Plus,
+    Receipt,
+    Search,
+    Smartphone,
+    Trash2,
+    TrendingDown,
+    TrendingUp,
+    Users,
+    Wallet,
+    X,
+    Filter,
+    Building,
+} from "lucide-react";
+import { useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import Pagination from "../../components/Pagination";
-import {
-    Frown, Plus, Trash2, Eye, Search, Edit, Check, X, Calendar, User,
-    Mail, Phone, MapPin, Globe, DollarSign, CheckCircle, AlertCircle,
-    CreditCard, History, Package, Shield, RefreshCw, Landmark, Wallet,
-    Smartphone, Building, Users, TrendingUp, TrendingDown, FileText,
-    ArrowUpRight, Info, ChevronRight, MessageSquare, Send
-} from "lucide-react";
-import { router, useForm, usePage } from "@inertiajs/react";
-import axios from "axios";
 import { useTranslation } from "../../hooks/useTranslation";
 
-export default function Index({ suppliers, filters, accounts ,dealerships}) {
-    const { auth,errors } = usePage().props;
+export default function Suppliers({ suppliers, filters, accounts }) {
+    const { auth } = usePage().props;
     const { t, locale } = useTranslation();
     const [model, setModel] = useState(false);
     const [advanceModel, setAdvanceModel] = useState(false);
-    const [smsTestModel, setSmsTestModel] = useState(false);
+    const [clearDueModel, setClearDueModel] = useState(false);
     const [selectedSupplier, setSelectedSupplier] = useState(null);
     const [editProcessing, setEditProcessing] = useState(false);
-    const [smsPreview, setSmsPreview] = useState('');
-    const [showSmsPreview, setShowSmsPreview] = useState(false);
-    const [smsTestResult, setSmsTestResult] = useState(null);
-    const [smsTestLoading, setSmsTestLoading] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
 
     // Handle search and filters
     const [localFilters, setLocalFilters] = useState({
@@ -35,18 +56,29 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
         amount: "",
         payment_type: "cash",
         account_id: "",
-        payment_date: new Date().toISOString().split('T')[0],
+        payment_date: new Date().toISOString().split("T")[0],
         notes: "",
     });
+
+    const [clearDueData, setClearDueData] = useState({
+        paid_amount: "",
+        payment_type: "account_adjustment",
+        account_id: "",
+        type: "supplier",
+        txn_ref: `SDA-${Math.random().toString(36).substr(2, 10).toUpperCase()}`,
+        notes: "Clearing due payment",
+        payment_date: new Date().toISOString().split("T")[0],
+    });
+
     const [processingPayment, setProcessingPayment] = useState(false);
+    const [processingClearDue, setProcessingClearDue] = useState(false);
     const [paymentErrors, setPaymentErrors] = useState({});
+    const [clearDueErrors, setClearDueErrors] = useState({});
 
     // Model close handle
     const modelClose = () => {
-        supplyForm.reset();
+        supplierForm.reset();
         setModel(false);
-        setShowSmsPreview(false);
-        setSmsPreview('');
     };
 
     // Advance model close handle
@@ -55,33 +87,40 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
             amount: "",
             payment_type: "cash",
             account_id: "",
-            payment_date: new Date().toISOString().split('T')[0],
-            notes: ""
+            payment_date: new Date().toISOString().split("T")[0],
+            notes: "",
         });
         setSelectedSupplier(null);
         setPaymentErrors({});
         setAdvanceModel(false);
     };
 
-    // SMS Test model close handle
-    const smsTestModelClose = () => {
-        smsTestForm.reset();
-        setSmsTestResult(null);
-        setSmsTestModel(false);
+    // Clear Due model close handle
+    const clearDueModelClose = () => {
+        setClearDueData({
+            paid_amount: "",
+            payment_type: "account_adjustment",
+            account_id: "",
+            type: "supplier",
+            txn_ref: `SDA-${Math.random().toString(36).substr(2, 10).toUpperCase()}`,
+            notes: "Clearing due payment",
+            payment_date: new Date().toISOString().split("T")[0],
+        });
+        setSelectedSupplier(null);
+        setClearDueErrors({});
+        setClearDueModel(false);
     };
 
     // Handle search
-    const handleFilter = (field, value) => {
-        const newFilters = { ...localFilters, [field]: value };
-        setLocalFilters(newFilters);
-
-        router.get(route("supplier.view"),
-            { search: newFilters.search, status: newFilters.status },
+    const handleFilter = () => {
+        router.get(
+            route("supplier.view"),
+            { search: localFilters.search, status: localFilters.status },
             {
                 preserveScroll: true,
                 preserveState: true,
                 replace: true,
-            }
+            },
         );
     };
 
@@ -91,31 +130,24 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
     };
 
     const handleKeyPress = (e) => {
-        if (e.key === 'Enter') {
-            router.get(route("supplier.view"),
-                { search: localFilters.search, status: localFilters.status },
-                { preserveScroll: true, preserveState: true, replace: true }
-            );
+        if (e.key === "Enter") {
+            handleFilter();
         }
     };
 
     // Handle supplier form submission
-    const supplyForm = useForm({
+    const supplierForm = useForm({
         id: "",
         name: "",
-        description: "",
-        contact_person: "",
-        email: "",
         phone: "",
         company: "",
         address: "",
-        website: "",
+        email: "",
         advance_amount: 0,
         account_id: "",
         due_amount: 0,
         is_active: true,
-        send_welcome_sms: true, // New SMS field
-        dealership_id : null,
+        type: true,
     });
 
     const handleAdvancePayment = (supplier) => {
@@ -124,11 +156,32 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
             amount: "",
             payment_type: "cash",
             account_id: "",
-            payment_date: new Date().toISOString().split('T')[0],
-            notes: ""
+            payment_date: new Date().toISOString().split("T")[0],
+            notes: "",
         });
         setPaymentErrors({});
         setAdvanceModel(true);
+    };
+
+    const handleClearDue = (supplier) => {
+        setSelectedSupplier(supplier);
+
+        // Calculate total due amount
+        const dueAmount = calculateDueAmount(supplier.purchases);
+
+        // Set initial values
+        setClearDueData({
+            paid_amount: dueAmount,
+            payment_type: "account_adjustment",
+            account_id: "",
+            type: "supplier",
+            txn_ref: `SDA-${Math.random().toString(36).substr(2, 10).toUpperCase()}`,
+            notes: `Clearing due payment for ${supplier.name}`,
+            payment_date: new Date().toISOString().split("T")[0],
+        });
+
+        setClearDueErrors({});
+        setClearDueModel(true);
     };
 
     const handleAdvanceSubmit = async (e) => {
@@ -141,11 +194,17 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
         const amount = parseFloat(paymentData.amount) || 0;
 
         if (amount <= 0) {
-            errors.amount = "Advance amount must be greater than 0";
+            errors.amount = t(
+                "supplier.advance_amount_error",
+                "Advance amount must be greater than 0",
+            );
         }
 
         if (!paymentData.account_id) {
-            errors.account_id = "Please select an account";
+            errors.account_id = t(
+                "supplier.select_account_error",
+                "Please select an account",
+            );
         }
 
         if (Object.keys(errors).length > 0) {
@@ -155,101 +214,179 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
 
         setProcessingPayment(true);
 
-        router.post(route("advancePayment.store", { id: selectedSupplier.id }), {
-            supplier_id: selectedSupplier.id,
-            amount: paymentData.amount,
-            payment_type: paymentData.payment_type,
-            type: 'supplier',
-            account_id: paymentData.account_id,
-            notes: paymentData.notes,
-            is_advance: true,
-            payment_date: paymentData.payment_date,
-        }, {
-            onSuccess: () => {
-                advanceModelClose();
-                router.reload({ only: ['suppliers'] });
+        router.post(
+            route("advancePayment.store", { id: selectedSupplier.id }),
+            {
+                supplier_id: selectedSupplier.id,
+                amount: paymentData.amount,
+                payment_type: paymentData.payment_type,
+                type: "supplier",
+                account_id: paymentData.account_id,
+                notes: paymentData.notes,
+                is_advance: true,
+                payment_date: paymentData.payment_date,
             },
-            onError: (errors) => {
-                console.error('Advance payment error:', errors);
-                setPaymentErrors(errors);
-                setProcessingPayment(false);
-            }
-        });
+            {
+                onSuccess: () => {
+                    advanceModelClose();
+                    setProcessingPayment(false);
+                },
+                onError: (errors) => {
+                    console.error("Advance payment error:", errors);
+                    setPaymentErrors(errors);
+                    setProcessingPayment(false);
+                },
+            },
+        );
+    };
+
+    const handleClearDueSubmit = async (e) => {
+        e.preventDefault();
+
+        if (!selectedSupplier) return;
+
+        // Validation
+        const errors = {};
+        const amount = parseFloat(clearDueData.paid_amount) || 0;
+        const dueAmount = calculateDueAmount(selectedSupplier.purchases);
+
+        if (amount <= 0) {
+            errors.paid_amount = t(
+                "supplier.amount_greater_than_zero",
+                "Amount must be greater than 0",
+            );
+        }
+
+        if (amount > dueAmount) {
+            errors.paid_amount = t(
+                "supplier.amount_exceeds_due",
+                "Amount cannot exceed total due amount",
+            );
+        }
+
+        if (
+            clearDueData.payment_type === "account_adjustment" &&
+            !clearDueData.account_id
+        ) {
+            errors.account_id = t(
+                "supplier.select_account_error",
+                "Please select an account",
+            );
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setClearDueErrors(errors);
+            return;
+        }
+
+        setProcessingClearDue(true);
+
+        router.post(
+            route("clearDue.store", { id: selectedSupplier.id }),
+            clearDueData,
+            {
+                onSuccess: () => {
+                    clearDueModelClose();
+                    setProcessingClearDue(false);
+                },
+                onError: (errors) => {
+                    console.error("Clear due error:", errors);
+                    setClearDueErrors(errors);
+                    setProcessingClearDue(false);
+                },
+            },
+        );
     };
 
     const handlePaymentInputChange = (e) => {
         const { name, value } = e.target;
-        setPaymentData(prev => ({
+        setPaymentData((prev) => ({
             ...prev,
-            [name]: name === 'amount' ? parseFloat(value) || 0 : value
+            [name]: name === "amount" ? parseFloat(value) || 0 : value,
         }));
 
-        // Clear error when user starts typing
         if (paymentErrors[name]) {
-            setPaymentErrors(prev => ({ ...prev, [name]: null }));
+            setPaymentErrors((prev) => ({ ...prev, [name]: null }));
         }
     };
 
-    const handleSupplyCreateForm = (e) => {
+    const handleClearDueInputChange = (e) => {
+        const { name, value } = e.target;
+        setClearDueData((prev) => ({
+            ...prev,
+            [name]: name === "paid_amount" ? parseFloat(value) || 0 : value,
+        }));
+
+        if (clearDueErrors[name]) {
+            setClearDueErrors((prev) => ({ ...prev, [name]: null }));
+        }
+    };
+
+    const handleSupplierCreateForm = (e) => {
         e.preventDefault();
 
-        if (supplyForm.data.id) {
-            // Update existing supplier
-            supplyForm.put(route("supplier.update", { id: supplyForm.data.id }), {
+        if (supplierForm.data.id) {
+            supplierForm.put(route("supplier.update", supplierForm.data.id), {
                 onSuccess: () => {
-                    supplyForm.reset();
+                    supplierForm.reset();
                     setModel(false);
+                },
+                onError: (errors) => {
+                    console.log(errors);
                 },
             });
         } else {
-            // Create new supplier
-            supplyForm.post(route("supplier.store"), {
+            supplierForm.post(route("supplier.store"), {
                 onSuccess: () => {
-                    supplyForm.reset();
+                    supplierForm.reset();
                     setModel(false);
                 },
+                onError: (errors) => {
+                    console.log(errors);
+                },
             });
+        }
+    };
+
+    // Set full payment
+    const handleFullPayment = () => {
+        if (selectedSupplier) {
+            const dueAmount = calculateDueAmount(selectedSupplier.purchases) || 0;
+            setPaymentData((prev) => ({
+                ...prev,
+                amount: Math.max(0, dueAmount),
+            }));
         }
     };
 
     // Handle supplier edit
-    const handleSupplyEdit = (id) => {
+    const handleSupplierEdit = (id) => {
         setEditProcessing(true);
-        axios.get(route("supplier.edit", { id: id })).then((res) => {
-            const data = res.data.data;
-            supplyForm.setData({
-                id: data.id,
-                name: data.name,
-                description: data.description || "",
-                contact_person: data.contact_person,
-                email: data.email,
-                phone: data.phone,
-                company: data.company || "",
-                address: data.address || "",
-                website: data.website || "",
-                advance_amount: parseFloat(data.advance_amount) || 0,
-                account_id: data.account_id || "",
-                dealership_id: data.dealership_id || "",
-                due_amount: parseFloat(data.due_amount) || 0,
-                is_active: Boolean(data.is_active),
-                send_welcome_sms: true, // Default to true for new suppliers
+        axios
+            .get(route("supplier.edit", { id: id }))
+            .then((res) => {
+                const data = res.data.data;
+                supplierForm.setData({
+                    id: data.id,
+                    name: data.name,
+                    phone: data.phone,
+                    address: data.address || "",
+                    email: data.email || "",
+                    company: data.company || "",
+                    advance_amount: parseFloat(data.advance_amount) || 0,
+                    account_id: data.account_id || "",
+                    due_amount: parseFloat(data.due_amount) || 0,
+                    is_active: Boolean(data.is_active),
+                    type: data.type || true,
+                });
+                setModel(true);
+            })
+            .catch((error) => {
+                console.error("Error fetching supplier:", error);
+            })
+            .finally(() => {
+                setEditProcessing(false);
             });
-            setModel(true);
-        }).finally(() => {
-            setEditProcessing(false);
-        });
-    };
-
-    // Handle supplier delete
-    const handleDelete = (id) => {
-        if (confirm(t('supplier.delete_confirmation', 'Are you sure you want to delete this supplier contact?'))) {
-            router.delete(route("supplier.del", { id }), {
-                preserveScroll: true,
-                onSuccess: () => {
-                    alert(t('supplier.deleted_successfully', 'Supplier contact deleted successfully!'));
-                },
-            });
-        }
     };
 
     // Calculate due amount from purchases
@@ -261,62 +398,74 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
         }, 0);
     };
 
-    // Format currency based on locale
+    // Format currency
     const formatCurrency = (amount) => {
         const num = parseFloat(amount) || 0;
-        if (locale === 'bn') {
-            return new Intl.NumberFormat('bn-BD', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            }).format(num);
-        } else {
-            return new Intl.NumberFormat('en-BD', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            }).format(num);
-        }
-    };
-
-    // Format date based on locale
-    const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
-        try {
-            const date = new Date(dateString);
-            if (locale === 'bn') {
-                return date.toLocaleDateString('bn-BD', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric'
-                });
-            } else {
-                return date.toLocaleDateString('en-US', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric'
-                });
-            }
-        } catch (e) {
-            return dateString;
-        }
+        return new Intl.NumberFormat("en-IN", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(num);
     };
 
     // Get payment method icon
     const getPaymentIcon = (type) => {
         switch (type) {
-            case 'cash': return <Wallet size={16} className="text-green-600" />;
-            case 'bank': return <Landmark size={16} className="text-blue-600" />;
-            case 'mobile': return <Smartphone size={16} className="text-purple-600" />;
-            default: return <CreditCard size={16} />;
+            case "cash":
+                return <Wallet size={16} className="text-green-600" />;
+            case "bank":
+                return <Landmark size={16} className="text-blue-600" />;
+            case "mobile":
+                return <Smartphone size={16} className="text-purple-600" />;
+            default:
+                return <CreditCard size={16} />;
         }
     };
 
-    // Set full payment
-    const handleFullPayment = () => {
+    // Get account icon
+    const getAccountIcon = (type) => {
+        switch (type) {
+            case "cash":
+                return <Wallet size={14} className="text-green-600" />;
+            case "bank":
+                return <Landmark size={14} className="text-blue-600" />;
+            case "mobile_banking":
+                return <Smartphone size={14} className="text-purple-600" />;
+            default:
+                return <CreditCard size={14} className="text-gray-600" />;
+        }
+    };
+
+    // Quick payment amount buttons
+    const handleQuickAmount = (percentage) => {
         if (selectedSupplier) {
             const dueAmount = calculateDueAmount(selectedSupplier.purchases) || 0;
-            setPaymentData(prev => ({
+            const amount = Math.round(dueAmount * percentage) / 100;
+            setPaymentData((prev) => ({
                 ...prev,
-                amount: Math.max(0, dueAmount)
+                amount: Math.max(0, amount),
+            }));
+        }
+    };
+
+    // Quick clear due amount buttons
+    const handleQuickClearDueAmount = (percentage) => {
+        if (selectedSupplier) {
+            const dueAmount = calculateDueAmount(selectedSupplier.purchases) || 0;
+            const amount = Math.round(dueAmount * percentage) / 100;
+            setClearDueData((prev) => ({
+                ...prev,
+                paid_amount: Math.max(0, amount),
+            }));
+        }
+    };
+
+    // Set full payment for clear due
+    const handleFullClearDue = () => {
+        if (selectedSupplier) {
+            const dueAmount = calculateDueAmount(selectedSupplier.purchases) || 0;
+            setClearDueData((prev) => ({
+                ...prev,
+                paid_amount: Math.max(0, dueAmount),
             }));
         }
     };
@@ -324,49 +473,746 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
     // Get account details
     const getAccountDetails = () => {
         if (!paymentData.account_id) return null;
-        return accounts.find(account => account.id.toString() === paymentData.account_id.toString());
+        return accounts.find(
+            (account) =>
+                account.id.toString() === paymentData.account_id.toString(),
+        );
     };
 
     const selectedAccount = getAccountDetails();
 
-    // SMS Test form
-    const smsTestForm = useForm({
-        phone: "",
-        message: "Test SMS from supplier management system",
-    });
-
-    // Handle SMS test submission
-    const handleSmsTest = (e) => {
-        e.preventDefault();
-
-        setSmsTestLoading(true);
-        setSmsTestResult(null);
-
-        axios.post(route('supplier.send-test-sms'), smsTestForm.data())
-            .then((response) => {
-                setSmsTestResult({
-                    success: response.data.success,
-                    message: response.data.message,
-                    sandbox: response.data.sandbox || false,
-                });
-                if (response.data.success) {
-                    smsTestForm.reset();
-                }
-            })
-            .catch((error) => {
-                console.error('SMS test error:', error);
-                setSmsTestResult({
-                    success: false,
-                    message: error.response?.data?.message || 'Failed to send test SMS',
-                });
-            })
-            .finally(() => {
-                setSmsTestLoading(false);
-            });
+    // Get supplier's default account details
+    const getSupplierAccount = (accountId) => {
+        if (!accountId) return null;
+        return accounts.find(
+            (account) => account.id.toString() === accountId.toString(),
+        );
     };
 
+    // Get payment method options for clear due
+    const getPaymentMethodOptions = (supplier) => {
+        const options = [
+            {
+                value: "account_adjustment",
+                label: t("supplier.account_adjustment", "Account Adjustment"),
+                icon: <Landmark size={16} />,
+            },
+        ];
+
+        return options;
+    };
+
+    const hasActiveFilters = localFilters.search || localFilters.status;
+
+    // Stats calculation
+    const totalAdvance = suppliers.data.reduce((sum, s) => sum + parseFloat(s.advance_amount || 0), 0);
+    const totalDue = suppliers.data.reduce((sum, s) => sum + calculateDueAmount(s.purchases), 0);
+    const activeSuppliers = suppliers.data.filter(s => s.is_active).length;
+
     return (
-        <div className={`bg-white rounded-box p-5 ${locale === 'bn' ? 'bangla-font' : ''}`}>
+        <div
+            className={`bg-white rounded-box p-3 md:p-4 ${locale === "bn" ? "bangla-font" : ""}`}
+        >
+            {/* Clear Due Modal */}
+            {clearDueModel && selectedSupplier && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md transform transition-all overflow-hidden">
+                        {/* Modal Header */}
+                        <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-amber-100">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-orange-500 rounded-lg shadow-sm">
+                                        <Receipt
+                                            className="text-white"
+                                            size={22}
+                                        />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-gray-900">
+                                            {t(
+                                                "supplier.clear_due_payment",
+                                                "Clear Due Payment",
+                                            )}
+                                        </h3>
+                                        <p className="text-sm text-gray-600">
+                                            {t(
+                                                "supplier.clear_due_desc",
+                                                "Clear outstanding dues to supplier",
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={clearDueModelClose}
+                                    className="btn btn-ghost btn-circle btn-sm hover:bg-gray-200"
+                                    disabled={processingClearDue}
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="px-6 py-5 max-h-[75vh] overflow-y-auto">
+                            {/* Supplier Due Summary */}
+                            <div className="mb-6 p-4 bg-white rounded-xl border border-red-200 shadow-sm">
+                                <div className="flex items-start justify-between mb-4">
+                                    <div>
+                                        <h4 className="font-bold text-gray-900 text-lg">
+                                            {selectedSupplier.name}
+                                        </h4>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <Phone
+                                                size={14}
+                                                className="text-gray-500"
+                                            />
+                                            <p className="text-sm text-gray-600">
+                                                {selectedSupplier.phone}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div
+                                        className={`px-3 py-1 rounded-full ${selectedSupplier.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"} text-xs font-bold flex items-center gap-1`}
+                                    >
+                                        {selectedSupplier.is_active ? (
+                                            <CheckCircle size={12} />
+                                        ) : (
+                                            <X size={12} />
+                                        )}
+                                        {selectedSupplier.is_active
+                                            ? t("supplier.active", "Active")
+                                            : t(
+                                                  "supplier.inactive",
+                                                  "Inactive",
+                                              )}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
+                                        <div className="text-xs text-green-700 uppercase font-bold tracking-wider mb-1">
+                                            {t(
+                                                "supplier.current_advance",
+                                                "Current Advance",
+                                            )}
+                                        </div>
+                                        <div className="text-xl font-black text-green-800">
+                                            ৳
+                                            {formatCurrency(
+                                                selectedSupplier.advance_amount ||
+                                                    0,
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="text-center p-3 bg-gradient-to-br from-red-50 to-red-100 rounded-lg border border-red-200">
+                                        <div className="text-xs text-red-700 uppercase font-bold tracking-wider mb-1">
+                                            {t(
+                                                "supplier.total_due",
+                                                "Total Due",
+                                            )}
+                                        </div>
+                                        <div className="text-xl font-black text-red-800">
+                                            ৳
+                                            {formatCurrency(
+                                                calculateDueAmount(
+                                                    selectedSupplier.purchases,
+                                                ) || 0,
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Due Purchases Info */}
+                                {selectedSupplier.purchases &&
+                                    selectedSupplier.purchases.filter(
+                                        (p) => {
+                                            const due = (parseFloat(p.grand_total) || 0) - (parseFloat(p.paid_amount) || 0);
+                                            return due > 0;
+                                        }
+                                    ).length > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-gray-200">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <AlertTriangle
+                                                    size={14}
+                                                    className="text-orange-600"
+                                                />
+                                                <span className="text-sm font-bold text-gray-700">
+                                                    {t(
+                                                        "supplier.due_purchases",
+                                                        "Due Purchases",
+                                                    )}
+                                                    :
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-gray-600 space-y-1">
+                                                {selectedSupplier.purchases
+                                                    .filter((p) => {
+                                                        const due = (parseFloat(p.grand_total) || 0) - (parseFloat(p.paid_amount) || 0);
+                                                        return due > 0;
+                                                    })
+                                                    .slice(0, 3)
+                                                    .map((purchase, idx) => {
+                                                        const due = (parseFloat(purchase.grand_total) || 0) - (parseFloat(purchase.paid_amount) || 0);
+                                                        return (
+                                                            <div
+                                                                key={idx}
+                                                                className="flex justify-between"
+                                                            >
+                                                                <span>
+                                                                    Purchase #
+                                                                    {
+                                                                        purchase.invoice_no
+                                                                    }
+                                                                </span>
+                                                                <span className="font-mono">
+                                                                    ৳
+                                                                    {formatCurrency(
+                                                                        due,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                {selectedSupplier.purchases.filter((p) => {
+                                                    const due = (parseFloat(p.grand_total) || 0) - (parseFloat(p.paid_amount) || 0);
+                                                    return due > 0;
+                                                }).length > 3 && (
+                                                    <div className="text-center text-gray-500 italic">
+                                                        +
+                                                        {selectedSupplier.purchases.filter((p) => {
+                                                            const due = (parseFloat(p.grand_total) || 0) - (parseFloat(p.paid_amount) || 0);
+                                                            return due > 0;
+                                                        }).length - 3}{" "}
+                                                        more purchases
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                            </div>
+
+                            <form onSubmit={handleClearDueSubmit}>
+                                <div className="space-y-6">
+                                    {/* Amount Section */}
+                                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <label className="label-text font-bold text-gray-800 text-sm">
+                                                {t(
+                                                    "supplier.amount_to_pay",
+                                                    "Amount to Pay",
+                                                )}{" "}
+                                                *
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleFullClearDue}
+                                                    className="btn btn-xs btn-primary bg-gray-900 border-gray-900 hover:bg-black hover:border-black"
+                                                    disabled={
+                                                        processingClearDue
+                                                    }
+                                                >
+                                                    {t(
+                                                        "supplier.full_payment",
+                                                        "Full",
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="relative">
+                                            <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-600 font-bold text-lg">
+                                                ৳
+                                            </span>
+                                            <input
+                                                type="number"
+                                                name="paid_amount"
+                                                step="0.01"
+                                                min="0.01"
+                                                max={calculateDueAmount(
+                                                    selectedSupplier.purchases,
+                                                )}
+                                                value={clearDueData.paid_amount}
+                                                onChange={
+                                                    handleClearDueInputChange
+                                                }
+                                                className="input input-bordered w-full pl-4 py-4 text-lg font-mono border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white"
+                                                disabled={processingClearDue}
+                                                required
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                        {/* Quick Amount Buttons */}
+                                        <div className="flex gap-2 mt-3">
+                                            {[25, 50, 75].map((percent) => (
+                                                <button
+                                                    type="button"
+                                                    key={percent}
+                                                    onClick={() =>
+                                                        handleQuickClearDueAmount(
+                                                            percent / 100,
+                                                        )
+                                                    }
+                                                    className="btn btn-xs btn-ghost hover:bg-gray-200 flex items-center gap-1"
+                                                    disabled={
+                                                        processingClearDue
+                                                    }
+                                                >
+                                                    <Percent size={10} />
+                                                    {percent}%
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {clearDueErrors.paid_amount && (
+                                            <div className="text-red-600 text-xs mt-2 flex items-center gap-2 bg-red-50 p-2 rounded-lg border border-red-200">
+                                                <AlertCircle size={12} />
+                                                {clearDueErrors.paid_amount}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Payment Method Selection */}
+                                    <div>
+                                        <label className="label-text font-bold text-gray-800 text-sm mb-3 block">
+                                            {t(
+                                                "supplier.payment_method",
+                                                "Payment Method",
+                                            )}{" "}
+                                            *
+                                        </label>
+                                        <div className="grid grid-cols-1 gap-3">
+                                            {getPaymentMethodOptions(
+                                                selectedSupplier,
+                                            ).map((option) => (
+                                                <label
+                                                    key={option.value}
+                                                    className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                                        clearDueData.payment_type ===
+                                                        option.value
+                                                            ? "border-gray-900 bg-gray-50"
+                                                            : "border-gray-200 hover:border-gray-300"
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <input
+                                                            type="radio"
+                                                            name="payment_type"
+                                                            value={option.value}
+                                                            checked={
+                                                                clearDueData.payment_type ===
+                                                                option.value
+                                                            }
+                                                            onChange={
+                                                                handleClearDueInputChange
+                                                            }
+                                                            className="radio radio-primary"
+                                                            disabled={
+                                                                processingClearDue
+                                                            }
+                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <div
+                                                                className={`p-2 rounded-lg ${
+                                                                    clearDueData.payment_type ===
+                                                                    option.value
+                                                                        ? "bg-gray-900 text-white"
+                                                                        : "bg-gray-100 text-gray-600"
+                                                                }`}
+                                                            >
+                                                                {option.icon}
+                                                            </div>
+                                                            <div>
+                                                                <div className="font-bold text-sm">
+                                                                    {
+                                                                        option.label
+                                                                    }
+                                                                </div>
+                                                                {option.description && (
+                                                                    <div className="text-xs text-gray-500">
+                                                                        {
+                                                                            option.description
+                                                                        }
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Account Selection (only for account_adjustment) */}
+                                    {clearDueData.payment_type ===
+                                        "account_adjustment" && (
+                                        <div>
+                                            <label className="label-text font-bold text-gray-800 text-sm mb-3 block">
+                                                {t(
+                                                    "supplier.payment_account",
+                                                    "Payment Account",
+                                                )}{" "}
+                                                *
+                                            </label>
+                                            <div className="relative">
+                                                <Landmark
+                                                    size={18}
+                                                    className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500"
+                                                />
+                                                <select
+                                                    name="account_id"
+                                                    value={
+                                                        clearDueData.account_id
+                                                    }
+                                                    onChange={
+                                                        handleClearDueInputChange
+                                                    }
+                                                    className="select select-bordered w-full pl-4 border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white appearance-none"
+                                                    disabled={
+                                                        processingClearDue
+                                                    }
+                                                    required
+                                                >
+                                                    <option value="">
+                                                        {t(
+                                                            "supplier.select_account",
+                                                            "Select an account",
+                                                        )}
+                                                    </option>
+                                                    {accounts.map((account) => (
+                                                        <option
+                                                            key={account.id}
+                                                            value={account.id}
+                                                        >
+                                                            {account.name} - ৳
+                                                            {formatCurrency(
+                                                                account.current_balance,
+                                                            )}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <ChevronRight
+                                                    size={18}
+                                                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 rotate-90"
+                                                />
+                                            </div>
+                                            {clearDueErrors.account_id && (
+                                                <div className="text-red-600 text-xs mt-2 flex items-center gap-2 bg-red-50 p-2 rounded-lg border border-red-200">
+                                                    <AlertCircle size={12} />
+                                                    {clearDueErrors.account_id}
+                                                </div>
+                                            )}
+
+                                            {/* Selected Account Details */}
+                                            {clearDueData.account_id &&
+                                                accounts.find(
+                                                    (acc) =>
+                                                        acc.id.toString() ===
+                                                        clearDueData.account_id.toString(),
+                                                ) && (
+                                                    <div className="mt-3 bg-gradient-to-r from-blue-50 to-indigo-50 p-3 rounded-lg border border-blue-200">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                {getAccountIcon(
+                                                                    accounts.find(
+                                                                        (acc) =>
+                                                                            acc.id.toString() ===
+                                                                            clearDueData.account_id.toString(),
+                                                                    ).type,
+                                                                )}
+                                                                <span className="font-bold text-sm">
+                                                                    {
+                                                                        accounts.find(
+                                                                            (
+                                                                                acc,
+                                                                            ) =>
+                                                                                acc.id.toString() ===
+                                                                                clearDueData.account_id.toString(),
+                                                                        ).name
+                                                                    }
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-sm font-mono text-green-700">
+                                                                ৳
+                                                                {formatCurrency(
+                                                                    accounts.find(
+                                                                        (acc) =>
+                                                                            acc.id.toString() ===
+                                                                            clearDueData.account_id.toString(),
+                                                                    )
+                                                                        .current_balance,
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                        </div>
+                                    )}
+
+                                    {/* Transaction Reference */}
+                                    <div>
+                                        <label className="label-text font-bold text-gray-800 text-sm mb-2 block">
+                                            {t(
+                                                "supplier.transaction_reference",
+                                                "Transaction Reference",
+                                            )}
+                                        </label>
+                                        <div className="relative">
+                                            <FileText
+                                                size={18}
+                                                className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500"
+                                            />
+                                            <input
+                                                type="text"
+                                                name="txn_ref"
+                                                value={clearDueData.txn_ref}
+                                                onChange={
+                                                    handleClearDueInputChange
+                                                }
+                                                className="input input-bordered w-full pl-12 py-3.5 border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white font-mono text-sm"
+                                                disabled={processingClearDue}
+                                                placeholder="Auto-generated reference"
+                                            />
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-1">
+                                            {t(
+                                                "supplier.auto_generated_ref",
+                                                "Auto-generated transaction reference",
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Date and Notes */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="label-text font-bold text-gray-800 text-sm mb-2 block">
+                                                {t(
+                                                    "supplier.payment_date",
+                                                    "Payment Date",
+                                                )}
+                                            </label>
+                                            <div className="relative">
+                                                <Calendar
+                                                    size={18}
+                                                    className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500"
+                                                />
+                                                <input
+                                                    type="date"
+                                                    name="payment_date"
+                                                    value={
+                                                        clearDueData.payment_date
+                                                    }
+                                                    onChange={
+                                                        handleClearDueInputChange
+                                                    }
+                                                    className="input input-bordered w-full pl-12 py-3.5 border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white"
+                                                    disabled={
+                                                        processingClearDue
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="label-text font-bold text-gray-800 text-sm mb-2 block">
+                                                {t("supplier.notes", "Notes")}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                name="notes"
+                                                value={clearDueData.notes}
+                                                onChange={
+                                                    handleClearDueInputChange
+                                                }
+                                                className="input input-bordered w-full py-3.5 border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white"
+                                                placeholder={t(
+                                                    "supplier.payment_notes",
+                                                    "Payment notes",
+                                                )}
+                                                disabled={processingClearDue}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Payment Summary */}
+                                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 shadow-sm">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="p-1.5 bg-blue-100 rounded-lg">
+                                                <Info
+                                                    size={18}
+                                                    className="text-blue-700"
+                                                />
+                                            </div>
+                                            <h6 className="font-bold text-gray-900">
+                                                {t(
+                                                    "supplier.payment_summary",
+                                                    "Payment Summary",
+                                                )}
+                                            </h6>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between items-center pb-3 border-b border-blue-200">
+                                                <div className="text-sm text-gray-600">
+                                                    {t(
+                                                        "supplier.payment_amount",
+                                                        "Payment Amount",
+                                                    )}
+                                                </div>
+                                                <div className="font-mono font-bold text-xl text-gray-900">
+                                                    ৳
+                                                    {formatCurrency(
+                                                        clearDueData.paid_amount ||
+                                                            0,
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex justify-between items-center">
+                                                <div className="text-sm text-gray-600">
+                                                    {t(
+                                                        "supplier.payment_method",
+                                                        "Payment Method",
+                                                    )}
+                                                </div>
+                                                <div className="font-bold text-gray-900">
+                                                    {clearDueData.payment_type ===
+                                                        "account_adjustment"
+                                                        ? t(
+                                                              "supplier.account_adjustment",
+                                                              "Account Adjustment",
+                                                          )
+                                                        : t(
+                                                              "supplier.cash",
+                                                              "Cash",
+                                                          )}
+                                                </div>
+                                            </div>
+
+                                            {clearDueData.payment_type ===
+                                                "account_adjustment" &&
+                                                clearDueData.account_id && (
+                                                    <>
+                                                        <div className="my-3 border-t border-blue-200 pt-3">
+                                                            <div className="flex justify-between items-center">
+                                                                <div className="text-sm text-gray-600">
+                                                                    {t(
+                                                                        "supplier.selected_account",
+                                                                        "Selected Account",
+                                                                    )}
+                                                                </div>
+                                                                <div className="font-bold text-gray-900">
+                                                                    {
+                                                                        accounts.find(
+                                                                            (
+                                                                                a,
+                                                                            ) =>
+                                                                                a.id.toString() ===
+                                                                                clearDueData.account_id.toString(),
+                                                                        )?.name
+                                                                    }
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="bg-white p-3 rounded-lg border border-blue-200">
+                                                            <div className="flex justify-between items-center">
+                                                                <div className="text-sm font-bold text-gray-800">
+                                                                    {t(
+                                                                        "supplier.balance_after_payment",
+                                                                        "Balance After Payment",
+                                                                    )}
+                                                                </div>
+                                                                <div className="font-mono font-bold text-xl text-blue-700">
+                                                                    ৳
+                                                                    {formatCurrency(
+                                                                        (accounts.find(
+                                                                            (
+                                                                                a,
+                                                                            ) =>
+                                                                                a.id.toString() ===
+                                                                                clearDueData.account_id.toString(),
+                                                                        )
+                                                                            ?.current_balance ||
+                                                                            0) -
+                                                                            (clearDueData.paid_amount ||
+                                                                                0),
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
+                                        </div>
+                                    </div>
+
+                                    {/* Errors */}
+                                    {clearDueErrors.submit && (
+                                        <div className="bg-red-50 text-red-700 border border-red-200 p-4 rounded-xl">
+                                            <div className="flex items-center gap-3">
+                                                <AlertCircle
+                                                    size={20}
+                                                    className="text-red-600"
+                                                />
+                                                <div>
+                                                    <div className="font-bold">
+                                                        {t(
+                                                            "supplier.payment_error",
+                                                            "Payment Error",
+                                                        )}
+                                                    </div>
+                                                    <div className="text-sm mt-1">
+                                                        {clearDueErrors.submit}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-3 mt-8 pt-6 border-t border-gray-200">
+                                    <button
+                                        type="button"
+                                        onClick={clearDueModelClose}
+                                        className="btn btn-ghost flex-1 hover:bg-gray-100 text-gray-700 border border-gray-300"
+                                        disabled={processingClearDue}
+                                    >
+                                        {t("supplier.cancel", "Cancel")}
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="btn btn-warning flex-1 bg-orange-600 border-orange-600 hover:bg-orange-700 hover:border-orange-700 text-white"
+                                        disabled={
+                                            processingClearDue ||
+                                            !clearDueData.paid_amount ||
+                                            (clearDueData.payment_type ===
+                                                "account_adjustment" &&
+                                                !clearDueData.account_id)
+                                        }
+                                    >
+                                        {processingClearDue ? (
+                                            <>
+                                                <span className="loading loading-spinner loading-sm"></span>
+                                                {t(
+                                                    "supplier.processing",
+                                                    "Processing...",
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CheckCircle size={18} />
+                                                {t(
+                                                    "supplier.clear_due",
+                                                    "Clear Due",
+                                                )}
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Advance Payment Modal */}
             {advanceModel && selectedSupplier && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -376,14 +1222,23 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-green-500 rounded-lg shadow-sm">
-                                        <DollarSign className="text-white" size={22} />
+                                        <DollarSign
+                                            className="text-white"
+                                            size={22}
+                                        />
                                     </div>
                                     <div>
                                         <h3 className="text-xl font-black text-gray-900">
-                                            {t('supplier.add_advance_payment', 'Add Advance Payment')}
+                                            {t(
+                                                "supplier.add_advance_payment",
+                                                "Add Advance Payment",
+                                            )}
                                         </h3>
                                         <p className="text-sm text-gray-600">
-                                            {t('supplier.record_advance_payment', 'Record advance payment for supplier')}
+                                            {t(
+                                                "supplier.advance_payment_desc",
+                                                "Record advance payment to supplier",
+                                            )}
                                         </p>
                                     </div>
                                 </div>
@@ -403,33 +1258,66 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                             <div className="mb-6 p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
                                 <div className="flex items-start justify-between mb-4">
                                     <div>
-                                        <h4 className="font-bold text-gray-900 text-lg">{selectedSupplier.name}</h4>
+                                        <h4 className="font-bold text-gray-900 text-lg">
+                                            {selectedSupplier.name}
+                                        </h4>
                                         <div className="flex items-center gap-2 mt-1">
-                                            <User size={14} className="text-gray-500" />
-                                            <p className="text-sm text-gray-600">{selectedSupplier.contact_person}</p>
+                                            <Phone
+                                                size={14}
+                                                className="text-gray-500"
+                                            />
+                                            <p className="text-sm text-gray-600">
+                                                {selectedSupplier.phone}
+                                            </p>
                                         </div>
                                     </div>
-                                    <div className={`px-3 py-1 rounded-full ${selectedSupplier.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} text-xs font-bold flex items-center gap-1`}>
-                                        {selectedSupplier.is_active ? <CheckCircle size={12} /> : <X size={12} />}
-                                        {selectedSupplier.is_active ? t('supplier.active', 'Active') : t('supplier.inactive', 'Inactive')}
+                                    <div
+                                        className={`px-3 py-1 rounded-full ${selectedSupplier.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"} text-xs font-bold flex items-center gap-1`}
+                                    >
+                                        {selectedSupplier.is_active ? (
+                                            <CheckCircle size={12} />
+                                        ) : (
+                                            <X size={12} />
+                                        )}
+                                        {selectedSupplier.is_active
+                                            ? t("supplier.active", "Active")
+                                            : t(
+                                                  "supplier.inactive",
+                                                  "Inactive",
+                                              )}
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200">
                                         <div className="text-xs text-green-700 uppercase font-bold tracking-wider mb-1">
-                                            {t('supplier.current_advance', 'Current Advance')}
+                                            {t(
+                                                "supplier.current_advance",
+                                                "Current Advance",
+                                            )}
                                         </div>
                                         <div className="text-xl font-black text-green-800">
-                                            ৳{formatCurrency(selectedSupplier.advance_amount || 0)}
+                                            ৳
+                                            {formatCurrency(
+                                                selectedSupplier.advance_amount ||
+                                                    0,
+                                            )}
                                         </div>
                                     </div>
                                     <div className="text-center p-3 bg-gradient-to-br from-red-50 to-red-100 rounded-lg border border-red-200">
                                         <div className="text-xs text-red-700 uppercase font-bold tracking-wider mb-1">
-                                            {t('supplier.total_due', 'Total Due')}
+                                            {t(
+                                                "supplier.total_due",
+                                                "Total Due",
+                                            )}
                                         </div>
                                         <div className="text-xl font-black text-red-800">
-                                            ৳{formatCurrency(calculateDueAmount(selectedSupplier.purchases) || 0)}
+                                            ৳
+                                            {formatCurrency(
+                                                calculateDueAmount(
+                                                    selectedSupplier.purchases,
+                                                ) || 0,
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -441,27 +1329,34 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                                         <div className="flex justify-between items-center mb-3">
                                             <label className="label-text font-bold text-gray-800 text-sm">
-                                                {t('supplier.amount', 'Amount')} *
+                                                {t("supplier.amount", "Amount")}{" "}
+                                                *
                                             </label>
-                                            <button
-                                                type="button"
-                                                onClick={handleFullPayment}
-                                                className="btn btn-xs bg-[#1e4d2b] text-white bg-[#1e4d2b] text-white border-gray-900 hover:bg-black hover:border-black"
-                                                disabled={processingPayment}
-                                            >
-                                                {t('supplier.full_payment', 'Full')}
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleFullPayment}
+                                                    className="btn btn-xs btn-primary bg-gray-900 border-gray-900 hover:bg-black hover:border-black"
+                                                    disabled={processingPayment}
+                                                >
+                                                    {t("supplier.full", "Full")}
+                                                </button>
+                                            </div>
                                         </div>
                                         <div className="relative">
-                                            <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-600 font-bold text-lg">৳</span>
+                                            <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-600 font-bold text-lg">
+                                                ৳
+                                            </span>
                                             <input
                                                 type="number"
                                                 name="amount"
                                                 step="0.01"
                                                 min="0.01"
                                                 value={paymentData.amount}
-                                                onChange={handlePaymentInputChange}
-                                                className="input input-bordered w-full pl-3 py-4 text-lg font-mono border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white"
+                                                onChange={
+                                                    handlePaymentInputChange
+                                                }
+                                                className="input input-bordered w-full pl-4 py-4 text-lg font-mono border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white"
                                                 disabled={processingPayment}
                                                 required
                                                 placeholder="0.00"
@@ -478,26 +1373,49 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                     {/* Account Selection */}
                                     <div>
                                         <label className="label-text font-bold text-gray-800 text-sm mb-3 block">
-                                            {t('supplier.payment_account', 'Payment Account')} *
+                                            {t(
+                                                "supplier.payment_account",
+                                                "Payment Account",
+                                            )}{" "}
+                                            *
                                         </label>
                                         <div className="relative">
-                                            <Landmark size={18} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                                            <Landmark
+                                                size={18}
+                                                className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500"
+                                            />
                                             <select
                                                 name="account_id"
                                                 value={paymentData.account_id}
-                                                onChange={handlePaymentInputChange}
-                                                className="select select-bordered w-full border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white appearance-none"
+                                                onChange={
+                                                    handlePaymentInputChange
+                                                }
+                                                className="select select-bordered w-full pl-4 border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white appearance-none"
                                                 disabled={processingPayment}
                                                 required
                                             >
-                                                <option value="">{t('supplier.select_account', 'Select an account')}</option>
+                                                <option value="">
+                                                    {t(
+                                                        "supplier.select_account",
+                                                        "Select an account",
+                                                    )}
+                                                </option>
                                                 {accounts.map((account) => (
-                                                    <option key={account.id} value={account.id}>
-                                                        {account.name} - ৳{formatCurrency(account.current_balance)}
+                                                    <option
+                                                        key={account.id}
+                                                        value={account.id}
+                                                    >
+                                                        {account.name} - ৳
+                                                        {formatCurrency(
+                                                            account.current_balance,
+                                                        )}
                                                     </option>
                                                 ))}
                                             </select>
-                                            <ChevronRight size={18} className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 rotate-90" />
+                                            <ChevronRight
+                                                size={18}
+                                                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 rotate-90"
+                                            />
                                         </div>
                                         {paymentErrors.account_id && (
                                             <div className="text-red-600 text-xs mt-2 flex items-center gap-2 bg-red-50 p-2 rounded-lg border border-red-200">
@@ -513,38 +1431,72 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                             <div className="flex items-center justify-between mb-3">
                                                 <div className="flex items-center gap-3">
                                                     <div className="p-2 bg-white rounded-lg border border-blue-200">
-                                                        {getPaymentIcon(selectedAccount.type || 'bank')}
+                                                        {getPaymentIcon(
+                                                            selectedAccount.type ||
+                                                                "bank",
+                                                        )}
                                                     </div>
                                                     <div>
-                                                        <h5 className="font-bold text-gray-900">{selectedAccount.name}</h5>
+                                                        <h5 className="font-bold text-gray-900">
+                                                            {
+                                                                selectedAccount.name
+                                                            }
+                                                        </h5>
                                                         <p className="text-xs text-gray-600">
-                                                            {t('supplier.account_details', 'Account Details')}
+                                                            {t(
+                                                                "supplier.account_details",
+                                                                "Account Details",
+                                                            )}
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${selectedAccount.type === 'cash' ? 'bg-green-100 text-green-800' : selectedAccount.type === 'bank' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
-                                                    {selectedAccount.type || 'Bank'}
+                                                <span
+                                                    className={`text-xs font-bold px-3 py-1.5 rounded-full ${selectedAccount.type === "cash" ? "bg-green-100 text-green-800" : selectedAccount.type === "bank" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"}`}
+                                                >
+                                                    {selectedAccount.type
+                                                        ? t(
+                                                              `supplier.${selectedAccount.type}`,
+                                                              selectedAccount.type
+                                                                  .charAt(0)
+                                                                  .toUpperCase() +
+                                                                  selectedAccount.type.slice(
+                                                                      1,
+                                                                  ),
+                                                          )
+                                                        : "Bank"}
                                                 </span>
                                             </div>
 
                                             <div className="grid grid-cols-2 gap-4 mt-4">
                                                 <div className="bg-white p-3 rounded-lg border border-blue-100">
                                                     <div className="text-xs text-gray-500 mb-1">
-                                                        {t('supplier.account_number', 'Account Number')}
+                                                        {t(
+                                                            "supplier.account_number",
+                                                            "Account Number",
+                                                        )}
                                                     </div>
                                                     <div className="font-mono text-sm font-bold text-gray-800">
-                                                        {selectedAccount.account_number ?? 'N/A'}
+                                                        {selectedAccount.account_number ||
+                                                            t(
+                                                                "supplier.na",
+                                                                "N/A",
+                                                            )}
                                                     </div>
                                                 </div>
-
                                                 <div className="bg-white p-3 rounded-lg border border-blue-100">
                                                     <div className="text-xs text-gray-500 mb-1">
-                                                        {t('supplier.bank_name', 'Bank Name')}
+                                                        {t(
+                                                            "supplier.bank_name",
+                                                            "Bank Name",
+                                                        )}
                                                     </div>
                                                     <div className="font-bold text-sm text-gray-800">
-                                                        {selectedAccount.bank_name
-                                                            ?? selectedAccount.mobile_provider
-                                                            ?? t('supplier.cash', 'Cash')}
+                                                        {selectedAccount.bank_name ??
+                                                            selectedAccount.mobile_provider ??
+                                                            t(
+                                                                "supplier.cash",
+                                                                "Cash",
+                                                            )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -552,10 +1504,18 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                             <div className="mt-4 pt-4 border-t border-blue-200">
                                                 <div className="flex items-center justify-between">
                                                     <div className="text-sm text-gray-700 font-medium">
-                                                        {t('supplier.current_balance', 'Current Balance')}:
+                                                        {t(
+                                                            "supplier.current_balance",
+                                                            "Current Balance",
+                                                        )}
+                                                        :
                                                     </div>
                                                     <div className="font-mono font-bold text-xl text-green-700">
-                                                        ৳{formatCurrency(selectedAccount.current_balance || 0)}
+                                                        ৳
+                                                        {formatCurrency(
+                                                            selectedAccount.current_balance ||
+                                                                0,
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -566,15 +1526,25 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="label-text font-bold text-gray-800 text-sm mb-2 block">
-                                                {t('supplier.payment_date', 'Payment Date')}
+                                                {t(
+                                                    "supplier.payment_date",
+                                                    "Payment Date",
+                                                )}
                                             </label>
                                             <div className="relative">
-                                                <Calendar size={18} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                                                <Calendar
+                                                    size={18}
+                                                    className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500"
+                                                />
                                                 <input
                                                     type="date"
                                                     name="payment_date"
-                                                    value={paymentData.payment_date}
-                                                    onChange={handlePaymentInputChange}
+                                                    value={
+                                                        paymentData.payment_date
+                                                    }
+                                                    onChange={
+                                                        handlePaymentInputChange
+                                                    }
                                                     className="input input-bordered w-full pl-12 py-3.5 border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white"
                                                     disabled={processingPayment}
                                                 />
@@ -582,15 +1552,25 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                         </div>
                                         <div>
                                             <label className="label-text font-bold text-gray-800 text-sm mb-2 block">
-                                                {t('supplier.notes', 'Notes')} ({t('supplier.optional', 'Optional')})
+                                                {t("supplier.notes", "Notes")} (
+                                                {t(
+                                                    "supplier.optional",
+                                                    "Optional",
+                                                )}
+                                                )
                                             </label>
                                             <input
                                                 type="text"
                                                 name="notes"
                                                 value={paymentData.notes}
-                                                onChange={handlePaymentInputChange}
+                                                onChange={
+                                                    handlePaymentInputChange
+                                                }
                                                 className="input input-bordered w-full py-3.5 border-gray-300 focus:border-gray-900 focus:ring-2 focus:ring-gray-900/20 bg-white"
-                                                placeholder={t('supplier.payment_reference', 'Payment reference')}
+                                                placeholder={t(
+                                                    "supplier.payment_reference",
+                                                    "Payment reference",
+                                                )}
                                                 disabled={processingPayment}
                                             />
                                         </div>
@@ -600,35 +1580,58 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                     <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-xl border border-amber-200 shadow-sm">
                                         <div className="flex items-center gap-2 mb-4">
                                             <div className="p-1.5 bg-amber-100 rounded-lg">
-                                                <Info size={18} className="text-amber-700" />
+                                                <Info
+                                                    size={18}
+                                                    className="text-amber-700"
+                                                />
                                             </div>
                                             <h6 className="font-bold text-gray-900">
-                                                {t('supplier.payment_summary', 'Payment Summary')}
+                                                {t(
+                                                    "supplier.payment_summary",
+                                                    "Payment Summary",
+                                                )}
                                             </h6>
                                         </div>
 
                                         <div className="space-y-3">
                                             <div className="flex justify-between items-center pb-3 border-b border-amber-200">
                                                 <div className="text-sm text-gray-600">
-                                                    {t('supplier.amount_to_pay', 'Amount to Pay')}
+                                                    {t(
+                                                        "supplier.amount_to_pay",
+                                                        "Amount to Pay",
+                                                    )}
                                                 </div>
                                                 <div className="font-mono font-bold text-xl text-gray-900">
-                                                    ৳{formatCurrency(paymentData.amount || 0)}
+                                                    ৳
+                                                    {formatCurrency(
+                                                        paymentData.amount || 0,
+                                                    )}
                                                 </div>
                                             </div>
 
                                             <div className="flex justify-between items-center">
                                                 <div className="text-sm text-gray-600">
-                                                    {t('supplier.payment_account', 'Payment Account')}
+                                                    {t(
+                                                        "supplier.payment_account",
+                                                        "Payment Account",
+                                                    )}
                                                 </div>
                                                 <div className="font-bold text-gray-900">
-                                                    {selectedAccount ? selectedAccount.name : t('supplier.not_selected', 'Not selected')}
+                                                    {selectedAccount
+                                                        ? selectedAccount.name
+                                                        : t(
+                                                              "supplier.not_selected",
+                                                              "Not selected",
+                                                          )}
                                                 </div>
                                             </div>
 
                                             <div className="flex justify-between items-center">
                                                 <div className="text-sm text-gray-600">
-                                                    {t('supplier.payment_date', 'Payment Date')}
+                                                    {t(
+                                                        "supplier.payment_date",
+                                                        "Payment Date",
+                                                    )}
                                                 </div>
                                                 <div className="font-medium">
                                                     {paymentData.payment_date}
@@ -640,10 +1643,17 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                                     <div className="my-3 border-t border-amber-200 pt-3">
                                                         <div className="flex justify-between items-center">
                                                             <div className="text-sm text-gray-600">
-                                                                {t('supplier.current_balance', 'Current Balance')}
+                                                                {t(
+                                                                    "supplier.current_balance",
+                                                                    "Current Balance",
+                                                                )}
                                                             </div>
                                                             <div className="font-mono font-bold text-green-700">
-                                                                ৳{formatCurrency(selectedAccount.current_balance || 0)}
+                                                                ৳
+                                                                {formatCurrency(
+                                                                    selectedAccount.current_balance ||
+                                                                        0,
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -651,10 +1661,19 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                                     <div className="bg-white p-3 rounded-lg border border-amber-200">
                                                         <div className="flex justify-between items-center">
                                                             <div className="text-sm font-bold text-gray-800">
-                                                                {t('supplier.balance_after_payment', 'Balance After Payment')}
+                                                                {t(
+                                                                    "supplier.balance_after_payment",
+                                                                    "Balance After Payment",
+                                                                )}
                                                             </div>
                                                             <div className="font-mono font-bold text-xl text-blue-700">
-                                                                ৳{formatCurrency((selectedAccount.current_balance || 0) - (paymentData.amount || 0))}
+                                                                ৳
+                                                                {formatCurrency(
+                                                                    (selectedAccount.current_balance ||
+                                                                        0) -
+                                                                        (paymentData.amount ||
+                                                                            0),
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -667,12 +1686,20 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                     {paymentErrors.submit && (
                                         <div className="bg-red-50 text-red-700 border border-red-200 p-4 rounded-xl">
                                             <div className="flex items-center gap-3">
-                                                <AlertCircle size={20} className="text-red-600" />
+                                                <AlertCircle
+                                                    size={20}
+                                                    className="text-red-600"
+                                                />
                                                 <div>
                                                     <div className="font-bold">
-                                                        {t('supplier.payment_error', 'Payment Error')}
+                                                        {t(
+                                                            "supplier.payment_error",
+                                                            "Payment Error",
+                                                        )}
                                                     </div>
-                                                    <div className="text-sm mt-1">{paymentErrors.submit}</div>
+                                                    <div className="text-sm mt-1">
+                                                        {paymentErrors.submit}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -687,22 +1714,32 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                         className="btn btn-ghost flex-1 hover:bg-gray-100 text-gray-700 border border-gray-300"
                                         disabled={processingPayment}
                                     >
-                                        {t('supplier.cancel', 'Cancel')}
+                                        {t("supplier.cancel", "Cancel")}
                                     </button>
                                     <button
                                         type="submit"
                                         className="btn btn-success flex-1 bg-green-600 border-green-600 hover:bg-green-700 hover:border-green-700 text-white"
-                                        disabled={processingPayment || !paymentData.amount || !paymentData.account_id}
+                                        disabled={
+                                            processingPayment ||
+                                            !paymentData.amount ||
+                                            !paymentData.account_id
+                                        }
                                     >
                                         {processingPayment ? (
                                             <>
                                                 <span className="loading loading-spinner loading-sm"></span>
-                                                {t('supplier.processing', 'Processing...')}
+                                                {t(
+                                                    "supplier.processing",
+                                                    "Processing...",
+                                                )}
                                             </>
                                         ) : (
                                             <>
                                                 <CheckCircle size={18} />
-                                                {t('supplier.submit_payment', 'Submit Payment')}
+                                                {t(
+                                                    "supplier.submit_payment",
+                                                    "Submit Payment",
+                                                )}
                                             </>
                                         )}
                                     </button>
@@ -713,270 +1750,557 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                 </div>
             )}
 
-            {/* Page Header */}
+            {/* Page Header with Responsive Filters */}
             <PageHeader
-                title={t('supplier.title', 'Supplier Contacts')}
-                subtitle={t('supplier.subtitle', 'Manage your all supplier contacts from here.')}
+                title={t("supplier.title", "Supplier Management")}
+                subtitle={t(
+                    "supplier.subtitle",
+                    "Manage your all suppliers from here.",
+                )}
             >
-                <div className="flex flex-wrap items-center gap-2">
-                    {/* Search */}
-                    <div className="relative">
-                        <Search
-                            size={14}
-                            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
-                        />
-                        <input
-                            type="search"
-                            value={localFilters.search}
-                            onChange={(e) => handleFilter('search', e.target.value)}
-                            onKeyPress={handleKeyPress}
-                            placeholder={t('supplier.search_placeholder', 'Search suppliers...')}
-                            className="h-8 pl-8 pr-3 text-xs font-semibold border border-gray-300 rounded-md focus:outline-none focus:border-gray-500"
-                        />
+                {/* Responsive Filter Section */}
+                <div className="mb-4">
+                    {/* Desktop/Tablet View (md and up) */}
+                    <div className="hidden md:flex flex-col lg:flex-row items-start lg:items-center gap-3">
+                        {/* Main filter row */}
+                        <div className="flex-1 flex flex-wrap lg:flex-nowrap items-center gap-2">
+                            {/* Search Input */}
+                            <div className="flex-1 min-w-[200px] max-w-[300px]">
+                                <div className="join w-full">
+                                    <input
+                                        type="search"
+                                        value={localFilters.search}
+                                        onChange={(e) => setLocalFilters(prev => ({ ...prev, search: e.target.value }))}
+                                        onKeyPress={handleKeyPress}
+                                        placeholder={t(
+                                            "supplier.search_placeholder",
+                                            "Search suppliers...",
+                                        )}
+                                        className="input input-sm input-bordered join-item w-full"
+                                    />
+                                    <button
+                                        onClick={handleFilter}
+                                        className="btn btn-sm bg-gray-900 text-white join-item"
+                                        title="Search"
+                                    >
+                                        <Search size={14} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Status Filter */}
+                            {/* <div className="w-32">
+                                <select
+                                    value={localFilters.status}
+                                    onChange={(e) => setLocalFilters(prev => ({ ...prev, status: e.target.value }))}
+                                    className="select select-sm select-bordered w-full"
+                                >
+                                    <option value="">{t("supplier.all_status", "All Status")}</option>
+                                    <option value="active">{t("supplier.active", "Active")}</option>
+                                    <option value="inactive">{t("supplier.inactive", "Inactive")}</option>
+                                </select>
+                            </div> */}
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-1">
+                                
+                                {hasActiveFilters && (
+                                    <button
+                                        onClick={clearFilters}
+                                        className="btn btn-sm btn-ghost text-xs"
+                                        title="Clear Filters"
+                                    >
+                                        {t("supplier.clear", "Clear")}
+                                    </button>
+                                )}
+                                
+                                {/* <button
+                                    onClick={handleFilter}
+                                    className="btn btn-sm btn-primary"
+                                    title="Apply Filters"
+                                >
+                                    <Filter size={14} />
+                                </button> */}
+                            </div>
+                        </div>
+
+                        {/* Add Supplier Button - Right side on desktop */}
+                        <div className="lg:ml-auto">
+                            <button
+                                onClick={() => {
+                                    supplierForm.reset();
+                                    setModel(true);
+                                }}
+                                className="btn bg-gray-900 hover:bg-black text-white btn-sm flex items-center gap-2"
+                            >
+                                <Plus size={16} />
+                                <span>{t("supplier.add_supplier", "Add Supplier")}</span>
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Status Filter */}
-                    <select
-                        value={localFilters.status}
-                        onChange={(e) => handleFilter('status', e.target.value)}
-                        className="h-8 px-3 text-xs font-semibold border border-gray-300 rounded-md focus:outline-none focus:border-gray-500"
-                    >
-                        <option value="">{t('supplier.all_status', 'All Status')}</option>
-                        <option value="active">{t('supplier.active', 'Active')}</option>
-                        <option value="inactive">{t('supplier.inactive', 'Inactive')}</option>
-                    </select>
+                    {/* Mobile View (below md) */}
+                    <div className="md:hidden space-y-2">
+                        {/* Top Row: Search and Add Supplier */}
+                        <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                                <div className="join w-full">
+                                    <input
+                                        type="search"
+                                        value={localFilters.search}
+                                        onChange={(e) => setLocalFilters(prev => ({ ...prev, search: e.target.value }))}
+                                        onKeyPress={handleKeyPress}
+                                        placeholder={t("supplier.search_placeholder", "Search suppliers...")}
+                                        className="input input-sm input-bordered join-item w-full"
+                                    />
+                                    <button
+                                        onClick={handleFilter}
+                                        className="btn btn-sm bg-gray-900 text-white join-item"
+                                    >
+                                        <Search size={14} />
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <button
+                                onClick={() => setShowFilters(!showFilters)}
+                                className="btn btn-sm btn-ghost"
+                                title="Toggle Filters"
+                            >
+                                <Filter size={16} />
+                            </button>
+                            
+                            <button
+                                onClick={() => {
+                                    supplierForm.reset();
+                                    setModel(true);
+                                }}
+                                className="btn bg-gray-900 text-white btn-sm p-2"
+                                title={t("supplier.add_supplier", "Add Supplier")}
+                            >
+                                <Plus size={16} />
+                            </button>
+                        </div>
 
-                    {/* Clear Filter */}
-                    {(localFilters.search || localFilters.status) && (
-                        <button
-                            onClick={clearFilters}
-                            className="h-8 px-3 text-xs font-semibold text-gray-600 hover:text-black"
-                        >
-                            {t('supplier.clear', 'Clear')}
-                        </button>
-                    )}
-
-                    {/* Add New Button */}
-                    <button
-                        onClick={() => setModel(true)}
-                        className="h-8 px-3 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest bg-[#1e4d2b] text-white text-white rounded-md hover:bg-black"
-                    >
-                        <Plus size={14} />
-                        {t('supplier.add_supplier', 'Add Supplier')}
-                    </button>
-                    <button
-                        onClick={() => setSmsTestModel(true)}
-                        className="btn btn-info btn-sm"
-                        title={t('supplier.test_sms', 'Test SMS')}
-                    >
-                        <MessageSquare size={15} /> SMS Test
-                    </button>
+                        {/* Collapsible Mobile Filters */}
+                        {showFilters && (
+                            <div className="bg-gray-50 p-3 rounded-box space-y-3">
+                                <div>
+                                    <label className="text-xs font-medium mb-1 block">{t("supplier.status", "Status")}</label>
+                                    <select
+                                        value={localFilters.status}
+                                        onChange={(e) => setLocalFilters(prev => ({ ...prev, status: e.target.value }))}
+                                        className="select select-sm select-bordered w-full"
+                                    >
+                                        <option value="">{t("supplier.all_status", "All Status")}</option>
+                                        <option value="active">{t("supplier.active", "Active")}</option>
+                                        <option value="inactive">{t("supplier.inactive", "Inactive")}</option>
+                                    </select>
+                                </div>
+                                
+                                <div className="flex gap-2 pt-2">
+                                    <button
+                                        onClick={handleFilter}
+                                        className="btn btn-sm bg-gray-900 text-white flex-1"
+                                    >
+                                        {t("supplier.apply_filters", "Apply Filters")}
+                                    </button>
+                                    {hasActiveFilters && (
+                                        <button
+                                            onClick={clearFilters}
+                                            className="btn btn-sm btn-ghost"
+                                        >
+                                            {t("supplier.clear_all", "Clear All")}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </PageHeader>
 
-            {/* Summary Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div className="bg-[#1e4d2b] text-white text-white rounded-xl p-4">
-                    <p className="text-xs uppercase tracking-widest font-bold text-gray-300 mb-2">
-                        {t('supplier.total_suppliers', 'Total Suppliers')}
+            {/* Summary Stats - Responsive */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
+                <div className="bg-gray-900 text-white rounded-box p-3">
+                    <p className="text-xs uppercase tracking-wider font-bold text-gray-300 mb-1">
+                        {t("supplier.total_suppliers", "Total Suppliers")}
                     </p>
                     <div className="flex items-center justify-between">
-                        <p className="text-2xl font-black">{suppliers.total}</p>
-                        <Users size={20} className="text-gray-400" />
+                        <p className="text-lg md:text-xl font-black">{suppliers.total}</p>
+                        <Users size={16} className="text-gray-400" />
                     </div>
                 </div>
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                    <p className="text-xs uppercase tracking-widest font-bold text-green-700 mb-2">
-                        {t('supplier.active_suppliers', 'Active Suppliers')}
+                <div className="bg-green-50 border border-green-200 rounded-box p-3">
+                    <p className="text-xs uppercase tracking-wider font-bold text-green-700 mb-1">
+                        {t("supplier.active_suppliers", "Active Suppliers")}
                     </p>
                     <div className="flex items-center justify-between">
-                        <p className="text-2xl font-black text-green-700">
-                            {suppliers.data.filter(s => s.is_active).length}
+                        <p className="text-lg md:text-xl font-black text-green-700">
+                            {activeSuppliers}
                         </p>
-                        <CheckCircle size={20} className="text-green-500" />
+                        <CheckCircle size={16} className="text-green-500" />
                     </div>
                 </div>
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                    <p className="text-xs uppercase tracking-widest font-bold text-amber-700 mb-2">
-                        {t('supplier.total_advance', 'Total Advance')}
+                <div className="bg-amber-50 border border-amber-200 rounded-box p-3">
+                    <p className="text-xs uppercase tracking-wider font-bold text-amber-700 mb-1">
+                        {t("supplier.total_advance", "Total Advance")}
                     </p>
                     <div className="flex items-center justify-between">
-                        <p className="text-2xl font-black text-amber-700">
-                            ৳{formatCurrency(suppliers.data.reduce((sum, s) => sum + parseFloat(s.advance_amount || 0), 0))}
+                        <p className="text-lg md:text-xl font-black text-amber-700">
+                            ৳{formatCurrency(totalAdvance)}
                         </p>
-                        <TrendingUp size={20} className="text-amber-500" />
+                        <TrendingUp size={16} className="text-amber-500" />
                     </div>
                 </div>
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                    <p className="text-xs uppercase tracking-widest font-bold text-red-700 mb-2">
-                        {t('supplier.total_due', 'Total Due')}
+                <div className="bg-red-50 border border-red-200 rounded-box p-3">
+                    <p className="text-xs uppercase tracking-wider font-bold text-red-700 mb-1">
+                        {t("supplier.total_due", "Total Due")}
                     </p>
                     <div className="flex items-center justify-between">
-                        <p className="text-2xl font-black text-red-700">
-                            ৳{formatCurrency(suppliers.data.reduce((sum, s) => sum + calculateDueAmount(s.purchases), 0))}
+                        <p className="text-lg md:text-xl font-black text-red-700">
+                            ৳{formatCurrency(totalDue)}
                         </p>
-                        <TrendingDown size={20} className="text-red-500" />
+                        <TrendingDown size={16} className="text-red-500" />
                     </div>
                 </div>
             </div>
 
-            {/* Suppliers Table */}
-            <div className="overflow-x-auto rounded-xl border border-gray-100">
-                {suppliers.data.length > 0 ? (
-                    <table className="table w-full">
-                        <thead className="bg-[#1e4d2b] text-white text-white uppercase text-[10px] tracking-widest">
-                            <tr>
-                                <th className="py-4">#</th>
-                                <th>{t('supplier.contact_info', 'Contact Info')}</th>
-                                <th>{t('supplier.company_details', 'Company Details')}</th>
-                                <th>{t('supplier.financial_status', 'Financial Status')}</th>
-                                <th className="text-right">{t('supplier.command', 'Command')}</th>
-                            </tr>
-                        </thead>
-                        <tbody className="font-bold text-sm text-gray-700">
-                            {suppliers.data.map((supplier, index) => {
-                                const dueAmount = calculateDueAmount(supplier.purchases);
-                                const hasDue = dueAmount > 0;
-                                const hasAdvance = supplier.advance_amount > 0;
+            {/* Suppliers Table - Responsive */}
+            <div className="print:hidden">
+                <div className="overflow-x-auto -mx-2">
+                    {suppliers.data.length > 0 ? (
+                        <>
+                            {/* Desktop/Tablet Table */}
+                            <div className="hidden md:block">
+                                <table className="table table-auto w-full text-sm">
+                                    <thead className="bg-gray-900 text-white uppercase text-[10px] tracking-widest">
+                                        <tr>
+                                            <th className="py-2 px-3">#</th>
+                                            <th className="py-2 px-3">{t("supplier.contact_info", "Contact Info")}</th>
+                                            <th className="py-2 px-3">{t("supplier.address", "Address")}</th>
+                                            <th className="py-2 px-3">{t("supplier.financial_status", "Financial Status")}</th>
+                                            <th className="py-2 px-3 text-right">{t("supplier.command", "Command")}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="font-bold text-sm text-gray-700">
+                                        {suppliers.data.map((supplier, index) => {
+                                            const dueAmount = calculateDueAmount(supplier.purchases);
+                                            const hasDue = dueAmount > 0;
+                                            const supplierAccount = getSupplierAccount(supplier.account_id);
 
-                                return (
-                                    <tr key={supplier.id} className="hover:bg-gray-50 border-b border-gray-50 transition-colors">
-                                        <td className="text-gray-400 font-mono text-xs">{index + 1}</td>
-                                        <td>
-                                            <p className="font-black text-gray-900 uppercase tracking-tighter leading-none mb-1">
-                                                {supplier.contact_person}
-                                            </p>
-                                            <span className="text-[10px] flex items-center gap-1 text-gray-400 font-black uppercase tracking-widest">
-                                                <Mail size={10} /> {supplier.email}
-                                            </span>
-                                            <span className="text-[10px] flex items-center gap-1 text-gray-400 font-black uppercase tracking-widest mt-1">
-                                                <Phone size={10} /> {supplier.phone}
-                                            </span>
-                                            {supplier.address && (
-                                                <span className="text-[10px] flex items-center gap-1 text-gray-400 font-black uppercase tracking-widest mt-1">
-                                                    <MapPin size={10} /> {supplier.address.substring(0, 30)}...
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-2 text-gray-900 uppercase text-xs">
-                                                    <Building size={12} className="text-blue-600" />
-                                                    {supplier.name}
-                                                </div>
-                                                {supplier.company && (
-                                                    <div className="flex items-center gap-2 text-gray-400 uppercase text-[10px] font-black">
-                                                        <span className="text-gray-400">🏢</span>
-                                                        {supplier.company}
+                                            return (
+                                                <tr key={supplier.id} className="hover:bg-gray-50 border-b">
+                                                    <td className="py-2 px-3 text-gray-400 font-mono text-xs">
+                                                        {index + 1}
+                                                    </td>
+                                                    <td className="py-2 px-3">
+                                                        <div className="max-w-[120px]">
+                                                            <p className="font-bold text-gray-900 uppercase text-xs">
+                                                                {supplier.name}
+                                                            </p>
+                                                            <span className="text-[10px] flex items-center gap-1 text-gray-400 font-bold uppercase tracking-wider">
+                                                                <Phone size={10} /> {supplier.phone}
+                                                            </span>
+                                                            {supplier.company && (
+                                                                <span className="text-[10px] flex items-center gap-1 text-gray-600 font-bold uppercase tracking-wider mt-1">
+                                                                    <Building size={10} /> {supplier.company}
+                                                                </span>
+                                                            )}
+                                                            {supplierAccount && (
+                                                                <span className="text-[10px] flex items-center gap-1 text-blue-500 font-bold uppercase tracking-wider mt-1">
+                                                                    {getAccountIcon(supplierAccount.type)}
+                                                                    <span>{supplierAccount.name}</span>
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-2 px-3">
+                                                        <div className="max-w-[120px]">
+                                                            {supplier.address ? (
+                                                                <div className="flex items-center gap-2 text-gray-900 uppercase text-xs">
+                                                                    <MapPin size={12} className="text-blue-600" />
+                                                                    <span className="line-clamp-2">
+                                                                        {supplier.address.substring(0, 30)}...
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-2 text-gray-400 uppercase text-[10px] font-bold">
+                                                                    <span className="text-gray-400">📍</span>
+                                                                    {t("supplier.no_address", "No address")}
+                                                                </div>
+                                                            )}
+                                                            <div className="mt-1">
+                                                                <span className={`badge border-none font-bold text-[9px] uppercase py-1 px-2 ${supplier.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
+                                                                    {supplier.is_active
+                                                                        ? t("supplier.active", "Active")
+                                                                        : t("supplier.inactive", "Inactive")}
+                                                                </span>
+                                                                <span className={`badge border-none ml-1 font-bold text-[9px] uppercase py-1 px-2 ${supplier.type == 'global' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
+                                                                    {supplier.type || 'local'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-2 px-3">
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-xs text-gray-600">
+                                                                    {t("supplier.advance", "Advance")}:
+                                                                </span>
+                                                                <span className="font-mono text-xs font-bold text-green-600">
+                                                                    ৳{formatCurrency(supplier.advance_amount || 0)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-xs text-gray-600">
+                                                                    {t("supplier.due", "Due")}:
+                                                                </span>
+                                                                <span className={`font-mono text-xs font-bold ${hasDue ? "text-red-600" : "text-gray-500"}`}>
+                                                                    ৳{formatCurrency(dueAmount)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="mt-1 space-y-1">
+                                                                <button
+                                                                    onClick={() => handleAdvancePayment(supplier)}
+                                                                    className="btn btn-xs btn-success w-full flex items-center justify-center gap-1"
+                                                                >
+                                                                    <DollarSign size={12} />
+                                                                    {t("supplier.add_advance", "Add Advance")}
+                                                                </button>
+                                                                {hasDue && (
+                                                                    <button
+                                                                        onClick={() => handleClearDue(supplier)}
+                                                                        className="btn btn-xs btn-warning w-full flex items-center justify-center gap-1"
+                                                                    >
+                                                                        <Receipt size={12} />
+                                                                        {t("supplier.clear_due", "Clear Due")}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-2 px-3 text-right">
+                                                        <div className="flex justify-end gap-1">
+                                                            {route().has('supplier.show') && (
+                                                                <Link
+                                                                    href={route("supplier.show", { id: supplier.id })}
+                                                                    className="btn btn-ghost btn-square btn-xs p-1 hover:bg-blue-600 hover:text-white text-blue-600"
+                                                                    title={t("supplier.view_details", "View Details")}
+                                                                >
+                                                                    <Eye size={12} />
+                                                                </Link>
+                                                            )}
+
+                                                            <button
+                                                                disabled={editProcessing}
+                                                                onClick={() => handleSupplierEdit(supplier.id)}
+                                                                className="btn btn-ghost btn-square btn-xs p-1 hover:bg-amber-600 hover:text-white text-amber-600"
+                                                                title={t("supplier.edit", "Edit")}
+                                                            >
+                                                                <Edit size={12} />
+                                                            </button>
+
+                                                            {/* <Link
+                                                                href={route("supplier.del", { id: supplier.id })}
+                                                                onClick={(e) => {
+                                                                    if (!confirm(t("supplier.delete_confirmation", "Are you sure you want to delete this supplier?"))) {
+                                                                        e.preventDefault();
+                                                                    }
+                                                                }}
+                                                                className="btn btn-ghost btn-square btn-xs p-1 text-red-400 hover:bg-red-600 hover:text-white"
+                                                                title={t("supplier.delete", "Delete")}
+                                                            >
+                                                                <Trash2 size={12} />
+                                                            </Link> */}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Mobile Card View */}
+                            <div className="md:hidden space-y-3">
+                                {suppliers.data.map((supplier, index) => {
+                                    const dueAmount = calculateDueAmount(supplier.purchases);
+                                    const hasDue = dueAmount > 0;
+                                    const supplierAccount = getSupplierAccount(supplier.account_id);
+
+                                    return (
+                                        <div key={supplier.id} className="bg-white border rounded-lg p-3 shadow-sm">
+                                            {/* Card Header */}
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex-1">
+                                                    <div className="flex items-start justify-between">
+                                                        <div>
+                                                            <h3 className="font-bold text-sm">{supplier.name}</h3>
+                                                            <p className="text-xs text-gray-600">{supplier.phone}</p>
+                                                            {supplier.company && (
+                                                                <p className="text-xs text-gray-500">{supplier.company}</p>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex flex-col items-end gap-1">
+                                                            <span className={`badge badge-xs ${supplier.is_active ? "badge-success" : "badge-error"}`}>
+                                                                {supplier.is_active
+                                                                    ? t("supplier.active", "Active")
+                                                                    : t("supplier.inactive", "Inactive")}
+                                                            </span>
+                                                            <span className={`badge badge-xs ${supplier.type == 'global' ? "badge-success" : "badge-error"}`}>
+                                                                {supplier.type || 'local'}
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                )}
-                                                {supplier.website && (
-                                                    <div className="flex items-center gap-2 text-blue-500 uppercase text-[10px] font-black">
-                                                        <Globe size={10} />
-                                                        <a href={supplier.website} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                                                            {t('supplier.website', 'Website')}
-                                                        </a>
-                                                    </div>
-                                                )}
-                                                <div className="mt-1">
-                                                    <span className={`badge border-none font-black text-[9px] uppercase py-1.5 px-2 ${supplier.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                                                        {supplier.is_active ? t('supplier.active', 'Active') : t('supplier.inactive', 'Inactive')}
-                                                    </span>
                                                 </div>
                                             </div>
-                                        </td>
-                                        <td>
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs text-gray-600">{t('supplier.advance', 'Advance')}:</span>
-                                                    <span className="font-mono text-xs font-black text-green-600">
-                                                        ৳{formatCurrency(supplier.advance_amount || 0)}
-                                                    </span>
+
+                                            {/* Card Body */}
+                                            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                                                <div>
+                                                    <span className="text-gray-500">Address:</span>
+                                                    <p className="font-medium truncate">{supplier.address || t("supplier.no_address", "No address")}</p>
                                                 </div>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs text-gray-600">{t('supplier.due', 'Due')}:</span>
-                                                    <span className={`font-mono text-xs font-black ${hasDue ? 'text-red-600' : 'text-gray-500'}`}>
+                                                <div className="text-right">
+                                                    <span className="text-gray-500">Advance:</span>
+                                                    <p className="font-medium text-success">৳{formatCurrency(supplier.advance_amount || 0)}</p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-gray-500">Due:</span>
+                                                    <p className={`font-bold ${hasDue ? 'text-error' : 'text-success'}`}>
                                                         ৳{formatCurrency(dueAmount)}
-                                                    </span>
+                                                    </p>
                                                 </div>
-                                                <div className="mt-1">
+                                                {supplierAccount && (
+                                                    <div className="col-span-2">
+                                                        <span className="text-gray-500">Account:</span>
+                                                        <p className="font-medium text-blue-600">{supplierAccount.name}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Card Footer - Actions */}
+                                            <div className="flex justify-between items-center pt-2 border-t">
+                                                <div className="flex items-center gap-1">
                                                     <button
                                                         onClick={() => handleAdvancePayment(supplier)}
-                                                        className="btn btn-xs btn-success w-full flex items-center justify-center gap-1"
+                                                        className="btn btn-xs btn-success p-1"
+                                                        title={t("supplier.add_advance", "Add Advance")}
                                                     >
                                                         <DollarSign size={12} />
-                                                        {t('supplier.add_advance', 'Add Advance')}
                                                     </button>
+                                                    {hasDue && (
+                                                        <button
+                                                            onClick={() => handleClearDue(supplier)}
+                                                            className="btn btn-xs btn-warning p-1"
+                                                            title={t("supplier.clear_due", "Clear Due")}
+                                                        >
+                                                            <Receipt size={12} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-1">
+                                                    {route().has('supplier.show') && (
+                                                        <Link
+                                                            href={route("supplier.show", { id: supplier.id })}
+                                                            className="btn btn-ghost btn-square btn-xs p-1 hover:bg-blue-600 hover:text-white text-blue-600"
+                                                            title={t("supplier.view_details", "View Details")}
+                                                        >
+                                                            <Eye size={12} />
+                                                        </Link>
+                                                    )}
+
+                                                    <button
+                                                        disabled={editProcessing}
+                                                        onClick={() => handleSupplierEdit(supplier.id)}
+                                                        className="btn btn-ghost btn-square btn-xs p-1 hover:bg-amber-600 hover:text-white text-amber-600"
+                                                        title={t("supplier.edit", "Edit")}
+                                                    >
+                                                        <Edit size={12} />
+                                                    </button>
+
+                                                    <Link
+                                                        href={route("supplier.del", { id: supplier.id })}
+                                                        onClick={(e) => {
+                                                            if (!confirm(t("supplier.delete_confirmation", "Are you sure you want to delete this supplier?"))) {
+                                                                e.preventDefault();
+                                                            }
+                                                        }}
+                                                        className="btn btn-ghost btn-square btn-xs p-1 text-red-400 hover:bg-red-600 hover:text-white"
+                                                        title={t("supplier.delete", "Delete")}
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </Link>
                                                 </div>
                                             </div>
-                                        </td>
-                                        <td className="text-right">
-                                            <div className="flex justify-end gap-1">
-                                                <button
-                                                    disabled={editProcessing}
-                                                    onClick={() => handleSupplyEdit(supplier.id)}
-                                                    className="btn btn-ghost btn-square btn-xs hover:bg-blue-600 hover:text-white text-blue-600"
-                                                    title={t('supplier.edit', 'Edit')}
-                                                >
-                                                    <Edit size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(supplier.id)}
-                                                    className="btn btn-ghost btn-square btn-xs text-red-400 hover:bg-red-600 hover:text-white"
-                                                    title={t('supplier.delete', 'Delete')}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                ) : (
-                    <div className="py-20 text-center text-gray-400 flex flex-col items-center gap-3">
-                        <Frown size={40} className="text-gray-200" />
-                        <span className="font-black uppercase tracking-widest text-xs">
-                            {localFilters.search
-                                ? t('supplier.no_matching_suppliers', 'No suppliers matching ":search"', { search: localFilters.search })
-                                : t('supplier.no_contacts_found', 'No supplier contacts found')
-                            }
-                        </span>
-                        <button
-                            onClick={() => setModel(true)}
-                            className="h-8 px-3 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest bg-[#1e4d2b] text-white text-white rounded-md hover:bg-black mt-2"
-                        >
-                            <Plus size={14} />
-                            {t('supplier.add_first_supplier', 'Add Your First Supplier')}
-                        </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="border border-gray-200 rounded-box px-4 py-12 flex flex-col justify-center items-center gap-3">
+                            <Frown size={28} className="text-gray-400" />
+                            <h1 className="text-gray-500 text-base font-medium text-center">
+                                {localFilters.search
+                                    ? t('supplier.no_suppliers_matching', 'No suppliers matching "{{search}}"', { search: localFilters.search })
+                                    : t('supplier.no_suppliers_found', 'No suppliers found')}
+                            </h1>
+                            <button
+                                onClick={() => setModel(true)}
+                                className="btn bg-gray-900 text-white btn-sm mt-2"
+                            >
+                                <Plus size={14} />
+                                {t("supplier.add_first_supplier", "Add Your First Supplier")}
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Pagination */}
+                {suppliers.data.length > 0 && (
+                    <div className="mt-4">
+                        <Pagination data={suppliers} />
                     </div>
                 )}
             </div>
 
-            {/* Pagination */}
-            {suppliers.data.length > 0 && (
-                <div className="mt-6">
-                    <Pagination data={suppliers} />
-                </div>
-            )}
-
             {/* Add/Edit Supplier Modal */}
-            <dialog className={`modal ${model ? 'modal-open' : ''}`}>
-                <div className="modal-box max-w-3xl p-0 overflow-hidden">
+            <dialog
+                className={`modal ${model ? "modal-open" : ""} items-start justify-center`}
+            >
+                <div className="modal-box w-full max-w-4xl p-0 overflow-hidden items-start justify-center">
                     {/* Modal Header */}
-                    <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4">
+                    <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 w-full">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-[#1e4d2b] text-white rounded-lg">
+                                <div className="p-2 bg-gray-900 text-white rounded-lg">
                                     <Building size={20} className="text-white" />
                                 </div>
                                 <div>
                                     <h1 className="text-xl font-black text-gray-900">
-                                        {supplyForm.data.id ? t('supplier.edit_supplier', 'Edit Supplier') : t('supplier.new_supplier', 'New Supplier')}
+                                        {supplierForm.data.id
+                                            ? t(
+                                                  "supplier.edit_supplier",
+                                                  "Edit Supplier",
+                                              )
+                                            : t(
+                                                  "supplier.new_supplier",
+                                                  "New Supplier",
+                                              )}
                                     </h1>
                                     <p className="text-sm text-gray-500">
-                                        {supplyForm.data.id ? t('supplier.update_supplier_info', 'Update supplier information') : t('supplier.add_new_supplier', 'Add a new supplier to your contacts')}
+                                        {supplierForm.data.id
+                                            ? t(
+                                                  "supplier.update_supplier_info",
+                                                  "Update supplier information",
+                                              )
+                                            : t(
+                                                  "supplier.add_new_supplier",
+                                                  "Add a new supplier to your contacts",
+                                              )}
                                     </p>
                                 </div>
                             </div>
@@ -991,105 +2315,49 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
 
                     {/* Modal Body */}
                     <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
-                        <form onSubmit={handleSupplyCreateForm}>
+                        <form onSubmit={handleSupplierCreateForm}>
                             {/* Basic Information Section */}
                             <div className="mb-8">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <div className="p-1.5 bg-blue-100 rounded">
-                                        <User size={14} className="text-blue-600" />
-                                    </div>
-                                    <h3 className="font-bold text-gray-900">{t('supplier.basic_information', 'Basic Information')}</h3>
-                                    <div className="flex-1 h-px bg-gray-200"></div>
-                                </div>
-
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     {/* Supplier Name */}
                                     <div className="form-control">
                                         <label className="label py-0 mb-2">
                                             <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.supplier_name', 'Supplier Name')} <span className="text-red-500">*</span>
+                                                {t(
+                                                    "supplier.supplier_name",
+                                                    "Supplier Name",
+                                                )}{" "}
+                                                <span className="text-red-500">
+                                                    *
+                                                </span>
                                             </span>
                                         </label>
                                         <div className="relative">
-                                            <Building size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                            <Building
+                                                size={16}
+                                                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                                            />
                                             <input
                                                 type="text"
-                                                value={supplyForm.data.name}
-                                                onChange={(e) => supplyForm.setData("name", e.target.value)}
-                                                className="input input-bordered w-full pl-10 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
-                                                placeholder={t('supplier.supply_name_placeholder', 'Enter supplier name')}
+                                                value={supplierForm.data.name}
+                                                onChange={(e) =>
+                                                    supplierForm.setData(
+                                                        "name",
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="input input-bordered w-full pl-4 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                                                placeholder={t(
+                                                    "supplier.enter_supplier_name",
+                                                    "Enter supplier name",
+                                                )}
                                                 required
                                             />
                                         </div>
-                                        {supplyForm.errors.name && (
+                                        {supplierForm.errors.name && (
                                             <div className="text-red-600 text-xs mt-2 flex items-center gap-2 bg-red-50 p-2 rounded">
                                                 <AlertCircle size={12} />
-                                                {supplyForm.errors.name}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Contact Person */}
-                                    <div className="form-control">
-                                        <label className="label py-0 mb-2">
-                                            <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.contact_person', 'Contact Person')} <span className="text-red-500">*</span>
-                                            </span>
-                                        </label>
-                                        <div className="relative">
-                                            <User size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                                            <input
-                                                type="text"
-                                                value={supplyForm.data.contact_person}
-                                                onChange={(e) => supplyForm.setData("contact_person", e.target.value)}
-                                                className="input input-bordered w-full pl-10 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
-                                                placeholder={t('supplier.contact_person_placeholder', 'Enter contact person name')}
-                                                required
-                                            />
-                                        </div>
-                                        {supplyForm.errors.contact_person && (
-                                            <div className="text-red-600 text-xs mt-2 flex items-center gap-2 bg-red-50 p-2 rounded">
-                                                <AlertCircle size={12} />
-                                                {supplyForm.errors.contact_person}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Contact Information Section */}
-                            <div className="mb-8">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <div className="p-1.5 bg-green-100 rounded">
-                                        <Phone size={14} className="text-green-600" />
-                                    </div>
-                                    <h3 className="font-bold text-gray-900">{t('supplier.contact_information', 'Contact Information')}</h3>
-                                    <div className="flex-1 h-px bg-gray-200"></div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                    {/* Email */}
-                                    <div className="form-control">
-                                        <label className="label py-0 mb-2">
-                                            <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.email', 'Email')} <span className="text-red-500">*</span>
-                                            </span>
-                                        </label>
-                                        <div className="relative">
-                                            <Mail size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                                            <input
-                                                type="email"
-                                                value={supplyForm.data.email}
-                                                onChange={(e) => supplyForm.setData("email", e.target.value)}
-                                                className="input input-bordered w-full pl-10 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
-                                                placeholder="email@example.com"
-                                                required
-                                            />
-                                        </div>
-                                        {supplyForm.errors.email && (
-                                            <div className="text-red-600 text-xs mt-2 flex items-center gap-2 bg-red-50 p-2 rounded">
-                                                <AlertCircle size={12} />
-                                                {supplyForm.errors.email}
+                                                {supplierForm.errors.name}
                                             </div>
                                         )}
                                     </div>
@@ -1098,72 +2366,92 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                     <div className="form-control">
                                         <label className="label py-0 mb-2">
                                             <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.phone', 'Phone')} <span className="text-red-500">*</span>
+                                                {t("supplier.phone", "Phone")}{" "}
+                                                <span className="text-red-500">
+                                                    *
+                                                </span>
                                             </span>
                                         </label>
                                         <div className="relative">
-                                            <Phone size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                            <Phone
+                                                size={16}
+                                                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                                            />
                                             <input
                                                 type="tel"
-                                                value={supplyForm.data.phone}
-                                                onChange={(e) => supplyForm.setData("phone", e.target.value)}
-                                                className="input input-bordered w-full pl-10 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
-                                                placeholder="+880 1234 567890"
+                                                value={supplierForm.data.phone}
+                                                onChange={(e) =>
+                                                    supplierForm.setData(
+                                                        "phone",
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="input input-bordered w-full pl-4 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                                                placeholder={t(
+                                                    "supplier.enter_phone_number",
+                                                    "Enter phone number",
+                                                )}
                                                 required
                                             />
                                         </div>
-                                        {supplyForm.errors.phone && (
+                                        {supplierForm.errors.phone && (
                                             <div className="text-red-600 text-xs mt-2 flex items-center gap-2 bg-red-50 p-2 rounded">
                                                 <AlertCircle size={12} />
-                                                {supplyForm.errors.phone}
+                                                {supplierForm.errors.phone}
                                             </div>
                                         )}
                                     </div>
-                                </div>
-                            </div>
 
-                            {/* Company Details Section */}
-                            <div className="mb-8">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <div className="p-1.5 bg-amber-100 rounded">
-                                        <FileText size={14} className="text-amber-600" />
-                                    </div>
-                                    <h3 className="font-bold text-gray-900">{t('supplier.company_details', 'Company Details')}</h3>
-                                    <div className="flex-1 h-px bg-gray-200"></div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     {/* Company Name */}
                                     <div className="form-control">
                                         <label className="label py-0 mb-2">
                                             <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.company_name', 'Company Name')}
+                                                {t("supplier.company_name", "Company Name")}
                                             </span>
                                         </label>
                                         <input
                                             type="text"
-                                            value={supplyForm.data.company}
-                                            onChange={(e) => supplyForm.setData("company", e.target.value)}
+                                            value={supplierForm.data.company}
+                                            onChange={(e) =>
+                                                supplierForm.setData(
+                                                    "company",
+                                                    e.target.value,
+                                                )
+                                            }
                                             className="input input-bordered w-full py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
-                                            placeholder={t('supplier.company_placeholder', 'Enter company name (optional)')}
+                                            placeholder={t(
+                                                "supplier.enter_company_name",
+                                                "Enter company name (optional)",
+                                            )}
                                         />
                                     </div>
 
-                                    {/* Website */}
+                                    {/* Email */}
                                     <div className="form-control">
                                         <label className="label py-0 mb-2">
                                             <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.website_url', 'Website')}
+                                                {t("supplier.email", "Email")}
                                             </span>
                                         </label>
                                         <div className="relative">
-                                            <Globe size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                            <Mail
+                                                size={16}
+                                                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                                            />
                                             <input
-                                                type="url"
-                                                value={supplyForm.data.website}
-                                                onChange={(e) => supplyForm.setData("website", e.target.value)}
-                                                className="input input-bordered w-full pl-10 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
-                                                placeholder="https://example.com"
+                                                type="email"
+                                                value={supplierForm.data.email}
+                                                onChange={(e) =>
+                                                    supplierForm.setData(
+                                                        "email",
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="input input-bordered w-full pl-4 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                                                placeholder={t(
+                                                    "supplier.enter_email",
+                                                    "Enter email (optional)",
+                                                )}
                                             />
                                         </div>
                                     </div>
@@ -1172,169 +2460,378 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
 
                             {/* Financial Information Section */}
                             <div className="mb-8">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <div className="p-1.5 bg-purple-100 rounded">
-                                        <DollarSign size={14} className="text-purple-600" />
-                                    </div>
-                                    <h3 className="font-bold text-gray-900">{t('supplier.financial_information', 'Financial Information')}</h3>
-                                    <div className="flex-1 h-px bg-gray-200"></div>
-                                </div>
-
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     {/* Advance Amount */}
                                     <div className="form-control">
                                         <label className="label py-0 mb-2">
                                             <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.advance_amount', 'Advance Amount')}
+                                                {t(
+                                                    "supplier.advance_amount",
+                                                    "Advance Amount",
+                                                )}
                                             </span>
-                                            {supplyForm.data.id && (
-                                                <span className="text-xs text-gray-500 ml-2">({t('supplier.read_only_edit', 'Read-only for editing')})</span>
+                                            {supplierForm.data.id && (
+                                                <span className="text-xs text-gray-500 ml-2">
+                                                    {t(
+                                                        "supplier.readonly_for_editing",
+                                                        "(Read-only for editing)",
+                                                    )}
+                                                </span>
                                             )}
                                         </label>
                                         <div className="relative">
-                                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-bold">৳</span>
+                                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-bold">
+                                                ৳
+                                            </span>
                                             <input
                                                 type="number"
                                                 step="0.01"
                                                 min="0"
-                                                value={supplyForm.data.advance_amount}
-                                                onChange={(e) => supplyForm.setData("advance_amount", parseFloat(e.target.value) || 0)}
-                                                className={`input input-bordered w-full pl-3 py-3 ${supplyForm.data.id ? 'bg-gray-100 cursor-not-allowed text-gray-500' : 'border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900'}`}
-                                                placeholder={t('supplier.advance_amount_placeholder', 'Enter advance amount')}
-                                                readOnly={!!supplyForm.data.id}
+                                                value={
+                                                    supplierForm.data
+                                                        .advance_amount
+                                                }
+                                                onChange={(e) =>
+                                                    supplierForm.setData(
+                                                        "advance_amount",
+                                                        parseFloat(
+                                                            e.target.value,
+                                                        ) || 0,
+                                                    )
+                                                }
+                                                className={`input input-bordered w-full pl-4 py-3 ${supplierForm.data.id ? "bg-gray-100 cursor-not-allowed text-gray-500" : "border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"}`}
+                                                placeholder={t(
+                                                    "supplier.enter_advance_amount",
+                                                    "Enter advance amount",
+                                                )}
+                                                readOnly={
+                                                    !!supplierForm.data.id
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="form-control">
+                                        <label className="label py-0 mb-2">
+                                            <span className="label-text font-bold text-gray-700 text-sm">
+                                                {t(
+                                                    "supplier.due_amount",
+                                                    "Due Amount",
+                                                )}
+                                            </span>
+                                            {supplierForm.data.id && (
+                                                <span className="text-xs text-gray-500 ml-2">
+                                                    {t(
+                                                        "supplier.readonly_for_editing",
+                                                        "(Read-only for editing)",
+                                                    )}
+                                                </span>
+                                            )}
+                                        </label>
+
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-bold">
+                                                ৳
+                                            </span>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={
+                                                    supplierForm.data.due_amount
+                                                }
+                                                onChange={(e) =>
+                                                    supplierForm.setData(
+                                                        "due_amount",
+                                                        parseFloat(
+                                                            e.target.value,
+                                                        ) || 0,
+                                                    )
+                                                }
+                                                className={`input input-bordered w-full pl-4 py-3 ${supplierForm.data.id ? "bg-gray-100 cursor-not-allowed text-gray-500" : "border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"}`}
+                                                placeholder={t(
+                                                    "supplier.enter_due_amount",
+                                                    "Enter due amount",
+                                                )}
+                                                readOnly={
+                                                    !!supplierForm.data.id
+                                                }
                                             />
                                         </div>
                                     </div>
 
-                                    {/* Default Account */}
+                                    {/* Default Payment Account */}
                                     <div className="form-control">
                                         <label className="label py-0 mb-2">
                                             <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.default_account', 'Default Payment Account')}
+                                                {t(
+                                                    "supplier.default_payment_account",
+                                                    "Default Payment Account",
+                                                )}
                                             </span>
                                         </label>
                                         <div className="relative">
-                                            <Landmark size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                            <Landmark
+                                                size={16}
+                                                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                                            />
                                             <select
-                                                value={supplyForm.data.account_id}
-                                                onChange={(e) => supplyForm.setData("account_id", e.target.value)}
-                                                className="select select-bordered w-full pl-3 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
+                                                value={
+                                                    supplierForm.data.account_id
+                                                }
+                                                onChange={(e) =>
+                                                    supplierForm.setData(
+                                                        "account_id",
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="select select-bordered w-full pl-4 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
                                             >
-                                                <option value="">{t('supplier.select_account_optional', 'Select default account (optional)')}</option>
+                                                <option value="">
+                                                    {t(
+                                                        "supplier.select_default_account",
+                                                        "Select default account (optional)",
+                                                    )}
+                                                </option>
                                                 {accounts.map((account) => (
-                                                    <option key={account.id} value={account.id}>
-                                                        {account.name} - ৳{formatCurrency(account.current_balance)}
+                                                    <option
+                                                        key={account.id}
+                                                        value={account.id}
+                                                    >
+                                                        {account.name} - ৳
+                                                        {formatCurrency(
+                                                            account.current_balance,
+                                                        )}
                                                     </option>
                                                 ))}
                                             </select>
                                         </div>
-                                        {errors.account_id && (
-                                            <span className="text-red-500 text-sm">{errors.account_id}</span>
+                                        {supplierForm.errors.account_id && (
+                                            <div className="text-red-600 text-xs mt-2 flex items-center gap-2 bg-red-50 p-2 rounded">
+                                                <AlertCircle size={12} />
+                                                {supplierForm.errors.account_id}
+                                            </div>
                                         )}
-                                    </div>
-
-                                    {/* Default Dealership */}
-                                    <div className="form-control">
-                                        <label className="label py-0 mb-2">
-                                            <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.default_dealership', 'Default Dealership')}
-                                            </span>
-                                        </label>
-                                        <div className="relative">
-                                            <Landmark size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                                            <select
-                                                value={supplyForm.data.dealership_id}
-                                                onChange={(e) => supplyForm.setData("dealership_id", e.target.value)}
-                                                className="select select-bordered w-full pl-3 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900"
-                                            >
-                                                <option value="">{t('supplier.select_dealership_optional', 'Select default dealership (optional)')}</option>
-                                                {dealerships.map((dealership) => (
-                                                    <option key={dealership.id} value={dealership.id}>
-                                                        {dealership.name} - {dealership.email}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
                                     </div>
 
                                     {/* Status */}
                                     <div className="form-control">
                                         <label className="label py-0 mb-2">
                                             <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.status_field', 'Status')}
+                                                {t("supplier.status", "Status")}
                                             </span>
                                         </label>
                                         <label className="flex items-center justify-between p-3 border border-gray-300 rounded-lg hover:border-gray-900 cursor-pointer">
                                             <div className="flex items-center gap-3">
-                                                <div className={`p-1 rounded ${supplyForm.data.is_active ? 'bg-green-100' : 'bg-red-100'}`}>
-                                                    {supplyForm.data.is_active ? (
-                                                        <CheckCircle size={14} className="text-green-600" />
+                                                <div
+                                                    className={`p-1 rounded ${supplierForm.data.is_active ? "bg-green-100" : "bg-red-100"}`}
+                                                >
+                                                    {supplierForm.data
+                                                        .is_active ? (
+                                                        <CheckCircle
+                                                            size={14}
+                                                            className="text-green-600"
+                                                        />
                                                     ) : (
-                                                        <X size={14} className="text-red-600" />
+                                                        <X
+                                                            size={14}
+                                                            className="text-red-600"
+                                                        />
                                                     )}
                                                 </div>
                                                 <span className="font-bold">
-                                                    {supplyForm.data.is_active ? t('supplier.active_supplier', 'Active Supplier') : t('supplier.inactive_supplier', 'Inactive Supplier')}
+                                                    {supplierForm.data.is_active
+                                                        ? t(
+                                                              "supplier.active_supplier",
+                                                              "Active Supplier",
+                                                          )
+                                                        : t(
+                                                              "supplier.inactive_supplier",
+                                                              "Inactive Supplier",
+                                                          )}
                                                 </span>
                                             </div>
                                             <input
                                                 type="checkbox"
-                                                checked={supplyForm.data.is_active}
-                                                onChange={(e) => supplyForm.setData("is_active", e.target.checked)}
+                                                checked={
+                                                    supplierForm.data.is_active
+                                                }
+                                                onChange={(e) =>
+                                                    supplierForm.setData(
+                                                        "is_active",
+                                                        e.target.checked,
+                                                    )
+                                                }
                                                 className="toggle toggle-primary"
                                             />
                                         </label>
                                     </div>
+
+                                    {/* Supplier Type (only for new suppliers) */}
+                                    {!supplierForm.data.id && (
+                                        <div className="form-control">
+                                            <label className="label py-0 mb-2">
+                                                <span className="label-text font-bold text-gray-700 text-sm">
+                                                    {t("supplier.supplier_type", "Supplier Type")}
+                                                </span>
+                                            </label>
+                                            <label className="flex items-center justify-between p-3 border border-gray-300 rounded-lg hover:border-gray-900 cursor-pointer">
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className={`p-1 rounded ${supplierForm.data.type ? "bg-green-100" : "bg-red-100"}`}
+                                                    >
+                                                        {supplierForm.data
+                                                            .type ? (
+                                                            <CheckCircle
+                                                                size={14}
+                                                                className="text-green-600"
+                                                            />
+                                                        ) : (
+                                                            <CheckCircle
+                                                                size={14}
+                                                                className="text-red-600"
+                                                            />
+                                                        )}
+                                                    </div>
+                                                    <span className="font-bold">
+                                                        {supplierForm.data.type
+                                                             ? t("supplier.global_supplier", "Global Supplier")
+                                                             : t("supplier.local_supplier", "Local Supplier")}
+                                                    </span>
+                                                </div>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={
+                                                        supplierForm.data.type
+                                                    }
+                                                    onChange={(e) => {
+                                                        supplierForm.setData(
+                                                            "type",
+                                                            e.target.checked,
+                                                        )
+                                                    }}
+                                                    className="toggle toggle-primary"
+                                                />
+                                            </label>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* Additional Information Section */}
+                            {/* Address Section */}
                             <div className="mb-8">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <div className="p-1.5 bg-gray-100 rounded">
-                                        <Info size={14} className="text-gray-600" />
-                                    </div>
-                                    <h3 className="font-bold text-gray-900">{t('supplier.additional_information', 'Additional Information')}</h3>
-                                    <div className="flex-1 h-px bg-gray-200"></div>
-                                </div>
-
-                                <div className="space-y-5">
-                                    {/* Address */}
-                                    <div className="form-control">
-                                        <label className="label py-0 mb-2">
-                                            <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.address', 'Address')}
-                                            </span>
-                                        </label>
-                                        <div className="relative">
-                                            <MapPin size={16} className="absolute left-3 top-3 text-gray-400" />
-                                            <textarea
-                                                value={supplyForm.data.address}
-                                                onChange={(e) => supplyForm.setData("address", e.target.value)}
-                                                className="textarea textarea-bordered w-full pl-10 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 min-h-[80px]"
-                                                rows="3"
-                                                placeholder={t('supplier.address_placeholder', 'Enter full address (optional)')}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Description */}
-                                    <div className="form-control">
-                                        <label className="label py-0 mb-2">
-                                            <span className="label-text font-bold text-gray-700 text-sm">
-                                                {t('supplier.description_field', 'Description')}
-                                            </span>
-                                        </label>
+                                <div className="form-control">
+                                    <label className="label py-0 mb-2">
+                                        <span className="label-text font-bold text-gray-700 text-sm">
+                                            {t("supplier.address", "Address")}
+                                        </span>
+                                    </label>
+                                    <div className="relative">
                                         <textarea
-                                            value={supplyForm.data.description}
-                                            onChange={(e) => supplyForm.setData("description", e.target.value)}
-                                            className="textarea textarea-bordered w-full py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 min-h-[100px]"
-                                            rows="4"
-                                            placeholder={t('supplier.description_placeholder', 'Enter any additional notes or description about this supplier (optional)')}
+                                            value={supplierForm.data.address}
+                                            onChange={(e) =>
+                                                supplierForm.setData(
+                                                    "address",
+                                                    e.target.value,
+                                                )
+                                            }
+                                            className="textarea textarea-bordered w-full pl-4 py-3 border-gray-300 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 min-h-[80px]"
+                                            rows="3"
+                                            placeholder={t(
+                                                "supplier.enter_full_address",
+                                                "Enter full address (optional)",
+                                            )}
                                         />
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Selected Account Preview (if any) */}
+                            {supplierForm.data.account_id &&
+                                getSupplierAccount(
+                                    supplierForm.data.account_id,
+                                ) && (
+                                    <div className="mb-8">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="p-1.5 bg-blue-100 rounded">
+                                                <Landmark
+                                                    size={14}
+                                                    className="text-blue-600"
+                                                />
+                                            </div>
+                                            <h3 className="font-bold text-gray-900">
+                                                {t(
+                                                    "supplier.selected_account",
+                                                    "Selected Account",
+                                                )}
+                                            </h3>
+                                            <div className="flex-1 h-px bg-gray-200"></div>
+                                        </div>
+
+                                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 shadow-sm">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-white rounded-lg border border-blue-200">
+                                                        {getAccountIcon(
+                                                            getSupplierAccount(
+                                                                supplierForm
+                                                                    .data
+                                                                    .account_id,
+                                                            ).type,
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <h5 className="font-bold text-gray-900">
+                                                            {
+                                                                getSupplierAccount(
+                                                                    supplierForm
+                                                                        .data
+                                                                        .account_id,
+                                                                ).name
+                                                            }
+                                                        </h5>
+                                                        <p className="text-xs text-gray-600">
+                                                            {t(
+                                                                "supplier.default_payment_account",
+                                                                "Default payment account",
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <span
+                                                    className={`text-xs font-bold px-3 py-1.5 rounded-full ${getSupplierAccount(supplierForm.data.account_id).type === "cash" ? "bg-green-100 text-green-800" : getSupplierAccount(supplierForm.data.account_id).type === "bank" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"}`}
+                                                >
+                                                    {getSupplierAccount(
+                                                        supplierForm.data
+                                                            .account_id,
+                                                    ).type || "Bank"}
+                                                </span>
+                                            </div>
+
+                                            <div className="mt-4 pt-4 border-t border-blue-200">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="text-sm text-gray-700 font-medium">
+                                                        {t(
+                                                            "supplier.current_balance",
+                                                            "Current Balance",
+                                                        )}
+                                                        :
+                                                    </div>
+                                                    <div className="font-mono font-bold text-xl text-green-700">
+                                                        ৳
+                                                        {formatCurrency(
+                                                            getSupplierAccount(
+                                                                supplierForm
+                                                                    .data
+                                                                    .account_id,
+                                                            ).current_balance ||
+                                                                0,
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                             {/* Action Buttons */}
                             <div className="sticky bottom-0 bg-white border-t border-gray-200 -mx-6 px-6 py-4 mt-8">
@@ -1344,197 +2841,42 @@ export default function Index({ suppliers, filters, accounts ,dealerships}) {
                                         onClick={modelClose}
                                         className="btn btn-ghost flex-1 hover:bg-gray-100"
                                     >
-                                        {t('supplier.cancel', 'Cancel')}
+                                        {t("supplier.cancel", "Cancel")}
                                     </button>
                                     <button
                                         type="submit"
-                                        disabled={supplyForm.processing}
-                                        className="btn bg-[#1e4d2b] text-white flex-1 hover:bg-gray-800"
+                                        disabled={supplierForm.processing}
+                                        className="btn bg-gray-900 text-white flex-1 hover:bg-black"
                                     >
-                                        {supplyForm.processing ? (
+                                        {supplierForm.processing ? (
                                             <>
                                                 <span className="loading loading-spinner loading-sm"></span>
-                                                {t('supplier.processing', 'Processing...')}
+                                                {t(
+                                                    "supplier.processing",
+                                                    "Processing...",
+                                                )}
                                             </>
-                                        ) : supplyForm.data.id ? (
+                                        ) : supplierForm.data.id ? (
                                             <>
                                                 <CheckCircle size={18} />
-                                                {t('supplier.update_supplier', 'Update Supplier')}
+                                                {t(
+                                                    "supplier.update_supplier",
+                                                    "Update Supplier",
+                                                )}
                                             </>
                                         ) : (
                                             <>
                                                 <Plus size={18} />
-                                                {t('supplier.create_supplier', 'Create Supplier')}
+                                                {t(
+                                                    "supplier.create_supplier",
+                                                    "Create Supplier",
+                                                )}
                                             </>
                                         )}
                                     </button>
                                 </div>
                             </div>
                         </form>
-                    </div>
-                </div>
-            </dialog>
-
-            {/* SMS Test Modal */}
-            <dialog className={`modal ${smsTestModel ? 'modal-open' : ''}`}>
-                <div className="modal-box max-w-lg">
-                    <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-6">
-                        <h1 className="text-lg font-semibold text-gray-900">
-                            {t('supplier.sms_test_panel', 'SMS Test Panel')}
-                        </h1>
-                        <button
-                            onClick={smsTestModelClose}
-                            className="btn btn-circle btn-xs btn-ghost"
-                        >
-                            <X size={16} />
-                        </button>
-                    </div>
-
-                    <div className="mb-6">
-                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                            <div className="flex">
-                                <div className="ml-3">
-                                    <p className="text-sm text-yellow-700">
-                                        <strong>টেস্ট করার পদ্ধতি:</strong>
-                                        <ol className="list-decimal pl-5 mt-2 space-y-1">
-                                            <li>নতুন Supplier যোগ করুন</li>
-                                            <li>"Send Welcome SMS" চেকবক্স টিক দিন</li>
-                                            <li>Supplier সেভ করুন</li>
-                                            <li>Laravel Log চেক করুন: <code>tail -f storage/logs/laravel.log</code></li>
-                                            <li>Log এ SMS ডিটেইলস দেখতে পাবেন</li>
-                                        </ol>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <form onSubmit={handleSmsTest} className="space-y-4">
-                        <fieldset className="fieldset">
-                            <legend className="fieldset-legend">
-                                <Smartphone size={16} className="inline mr-2" />
-                                {t('supplier.phone_number', 'Phone Number')}
-                                <span className="text-red-500 ml-1">*</span>
-                            </legend>
-                            <input
-                                type="tel"
-                                value={smsTestForm.data.phone}
-                                onChange={(e) => smsTestForm.setData("phone", e.target.value)}
-                                className="input input-bordered w-full"
-                                placeholder="+8801XXXXXXXXX"
-                                required
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                                Bangladeshi format: +8801XXXXXXXXX
-                            </p>
-                        </fieldset>
-
-                        <fieldset className="fieldset">
-                            <legend className="fieldset-legend">
-                                <MessageSquare size={16} className="inline mr-2" />
-                                {t('supplier.message', 'Message')}
-                                <span className="text-red-500 ml-1">*</span>
-                            </legend>
-                            <textarea
-                                value={smsTestForm.data.message}
-                                onChange={(e) => smsTestForm.setData("message", e.target.value)}
-                                className="textarea textarea-bordered w-full"
-                                rows="4"
-                                placeholder={t('supplier.message_placeholder', 'Enter your message here...')}
-                                required
-                            />
-                            <div className="text-xs text-gray-500 mt-1 flex justify-between">
-                                <span>
-                                    {t('supplier.character_count', 'Characters')}: {smsTestForm.data.message.length}
-                                </span>
-                                <span>
-                                    {t('supplier.sms_count', 'SMS Count')}: {Math.ceil(smsTestForm.data.message.length / 160)}
-                                </span>
-                            </div>
-                        </fieldset>
-
-                        <div className="flex items-center justify-between pt-4">
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <div className={`badge ${true ? 'badge-warning' : 'badge-success'}`}>
-                                        {true ? t('supplier.sandbox_mode', 'Sandbox') : t('supplier.live_mode', 'Live')}
-                                    </div>
-                                    <span className="text-sm text-gray-600">
-                                        {true
-                                            ? t('supplier.sms_will_be_logged', 'SMS will be logged')
-                                            : t('supplier.real_sms_will_sent', 'Real SMS will be sent')
-                                        }
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    type="submit"
-                                    disabled={smsTestLoading}
-                                    className="btn btn-info"
-                                >
-                                    {smsTestLoading ? (
-                                        <>
-                                            <span className="loading loading-spinner loading-sm"></span>
-                                            {t('supplier.sending', 'Sending...')}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Send size={15} className="mr-2" />
-                                            {t('supplier.send_test_sms', 'Send Test SMS')}
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </form>
-
-                    {/* Test Result Display */}
-                    {smsTestResult && (
-                        <div className={`mt-6 p-4 rounded-lg ${smsTestResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                            <div className="flex items-start">
-                                {smsTestResult.success ? (
-                                    <CheckCircle className="h-6 w-6 text-green-500 mr-3" />
-                                ) : (
-                                    <XCircle className="h-6 w-6 text-red-500 mr-3" />
-                                )}
-                                <div>
-                                    <h4 className={`font-medium ${smsTestResult.success ? 'text-green-800' : 'text-red-800'}`}>
-                                        {smsTestResult.success
-                                            ? t('supplier.sms_sent_successfully', 'SMS Sent Successfully!')
-                                            : t('supplier.sms_failed', 'SMS Failed!')
-                                        }
-                                    </h4>
-                                    <p className={`mt-1 text-sm ${smsTestResult.success ? 'text-green-700' : 'text-red-700'}`}>
-                                        {smsTestResult.message}
-                                    </p>
-                                    {smsTestResult.sandbox && (
-                                        <div className="mt-2 p-2 bg-yellow-100 rounded">
-                                            <p className="text-sm text-yellow-800">
-                                                <strong>{t('supplier.sandbox_mode', 'Sandbox Mode')}:</strong>
-                                                {t('supplier.sms_logged_instead', 'SMS was logged instead of actually sent. Check Laravel log file.')}
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Laravel Log Example */}
-                    <div className="mt-6 pt-4 border-t border-gray-200">
-                        <h4 className="font-medium text-gray-900 mb-2 text-sm">
-                            {t('supplier.expected_log_output', 'Expected Log Output')}:
-                        </h4>
-                        <div className="bg-[#1e4d2b] text-white text-gray-100 p-3 rounded-lg font-mono text-xs overflow-x-auto">
-                            <div className="text-green-400">[2024-01-01 12:00:00] local.INFO: SMS Sandbox Mode:</div>
-                            <div className="ml-4">
-                                <div className="text-blue-400">"to": "+8801XXXXXXXXX",</div>
-                                <div className="text-blue-400">"message": "Test message...",</div>
-                                <div className="text-blue-400">"provider": "mimsms",</div>
-                                <div className="text-blue-400">"sandbox": true</div>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </dialog>

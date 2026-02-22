@@ -33,6 +33,7 @@ return new class extends Migration {
             $table->string('default_unit')->default('piece'); 
             $table->boolean('is_fraction_allowed')->default(false);
             $table->string('min_sale_unit')->nullable();
+             $table->enum('type', ['global', 'local'])->default('global');
             $table->timestamps();
         });
 

@@ -70,15 +70,16 @@ class WarehouseController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:50|unique:warehouses',
-            'address' => 'nullable|string',
+            'address' => 'required|string',
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email',
             'is_active' => 'boolean'
         ]);
 
+
         try {
             $warehouseData = $request->all();
+            $warehouseData['code'] = 'IN' . '-' . uniqid();
             $warehouseData['created_by'] = $user->id;
             $warehouseData['user_type'] = $user->type;
 
@@ -100,23 +101,58 @@ class WarehouseController extends Controller
 
         $warehouse = Warehouse::with(['stocks.product', 'stocks.variant'])->findOrFail($id);
 
-        // Get products with their variants and stocks for this warehouse
-        $products = Product::with([
-            'category',
-            'variants.stock' => function ($query) use ($id) {
-                $query->where('warehouse_id', $id);
-            }
-        ])
-            ->whereHas('variants.stock', function ($query) use ($id) {
-                $query->where('warehouse_id', $id)
-                    ->where('quantity', '>', 0);
+        $products = Product::query()
+            ->with([
+                'category',
+                'variants' => function ($q) use ($id) {
+                    $q->select('id', 'product_id', 'sku', 'attribute_values')
+                        ->with([
+                            'stocks' => function ($stockQuery) use ($id) {
+                                $stockQuery->where('warehouse_id', $id)
+                                    ->where('quantity', '>', 0)
+                                    ->select(
+                                        'id',
+                                        'warehouse_id',
+                                        'product_id',
+                                        'variant_id',
+                                        'quantity',
+                                        'purchase_price',
+                                        'sale_price',
+                                        'shadow_purchase_price',
+                                        'shadow_sale_price',
+                                        'batch_no',
+                                        'barcode',
+                                        'created_at'
+                                    )
+                                    ->orderByDesc('id');
+                            }
+                        ]);
+                }
+            ])
+            ->whereHas('variants.stocks', function ($q) use ($id) {
+                $q->where('warehouse_id', $id)->where('quantity', '>', 0);
             })
-            ->get()
-            ->map(function ($product) use ($id, $isShadowUser) {
-                // Calculate total stock for this product in this warehouse
-                $totalStock = $product->variants->sum(function ($variant) use ($id) {
-                    return $variant->stock ? $variant->stock->quantity : 0;
-                });
+            ->get(['id', 'name', 'product_no', 'description', 'category_id'])
+            ->map(function ($product) use ($isShadowUser) {
+                // Calculate total stock safely
+                $totalStock = 0;
+
+                // Check if variants relationship exists and is loaded
+                if ($product->variants && $product->variants->isNotEmpty()) {
+                    foreach ($product->variants as $variant) {
+                        // Check if stocks relationship exists and is loaded
+                        if ($variant->relationLoaded('stocks') && $variant->stocks) {
+                            // Convert to collection if it's a single model
+                            $stocks = $variant->stocks instanceof \Illuminate\Database\Eloquent\Collection
+                                ? $variant->stocks
+                                : collect([$variant->stocks]);
+
+                            foreach ($stocks as $stock) {
+                                $totalStock += (float) ($stock->quantity ?? 0);
+                            }
+                        }
+                    }
+                }
 
                 return [
                     'id' => $product->id,
@@ -125,41 +161,64 @@ class WarehouseController extends Controller
                     'description' => $product->description,
                     'category' => $product->category,
                     'total_stock' => $totalStock,
-                    'variants' => $product->variants->map(function ($variant) use ($id, $isShadowUser) {
-                        $stock = $variant->stock;
+                    'variants' => $product->variants
+                        ->filter(function ($variant) {
+                            // Check if stocks relationship exists and has items
+                            if (!$variant->relationLoaded('stocks') || !$variant->stocks) {
+                                return false;
+                            }
 
-                        // Use shadow prices for shadow users
-                        $purchasePrice = $isShadowUser ?
-                            ($stock ? $stock->shadow_purchase_price : 0) :
-                            ($stock ? $stock->purchase_price : 0);
+                            // Convert to collection if it's a single model
+                            $stocks = $variant->stocks instanceof \Illuminate\Database\Eloquent\Collection
+                                ? $variant->stocks
+                                : collect([$variant->stocks]);
 
-                        $salePrice = $isShadowUser ?
-                            ($stock ? $stock->shadow_sale_price : 0) :
-                            ($stock ? $stock->sale_price : 0);
+                            return $stocks->isNotEmpty();
+                        })
+                        ->map(function ($variant) use ($isShadowUser) {
+                            // Convert to collection if it's a single model
+                            $stocks = $variant->stocks instanceof \Illuminate\Database\Eloquent\Collection
+                                ? $variant->stocks
+                                : collect([$variant->stocks]);
 
-                        $stockQuantity = $stock ? $stock->quantity : 0;
-                        $stockValue = $stockQuantity * $purchasePrice;
+                            $batches = $stocks->map(function ($stock) use ($isShadowUser) {
+                                $qty = (float) ($stock->quantity ?? 0);
 
-                        return [
-                            'id' => $variant->id,
-                            'attribute_values' => $variant->attribute_values,
-                            'sku' => $variant->sku,
-                            'variant_name' => $variant->variant_name,
-                            'stock_quantity' => $stockQuantity,
-                            'purchase_price' => $purchasePrice,
-                            'sale_price' => $salePrice,
-                            'stock_value' => $stockValue,
-                        ];
-                    })->filter(function ($variant) {
-                        // Only show variants that have stock
-                        return $variant['stock_quantity'] > 0;
-                    })
+                                $purchasePrice = $isShadowUser
+                                    ? (float) ($stock->shadow_purchase_price ?? 0)
+                                    : (float) ($stock->purchase_price ?? 0);
+
+                                $salePrice = $isShadowUser
+                                    ? (float) ($stock->shadow_sale_price ?? 0)
+                                    : (float) ($stock->sale_price ?? 0);
+
+                                return [
+                                    'stock_id' => $stock->id,
+                                    'batch_no' => $stock->batch_no,
+                                    'barcode' => $stock->barcode,
+                                    'stock_quantity' => $qty,
+                                    'purchase_price' => $purchasePrice,
+                                    'sale_price' => $salePrice,
+                                    'stock_value' => $qty * $purchasePrice,
+                                    'created_at' => optional($stock->created_at)->toDateTimeString(),
+                                ];
+                            })->values();
+
+                            return [
+                                'id' => $variant->id,
+                                'attribute_values' => $variant->attribute_values,
+                                'sku' => $variant->sku,
+                                'total_stock_quantity' => $batches->sum('stock_quantity'),
+                                'batches' => $batches,
+                            ];
+                        })
+                        ->values(),
                 ];
             })
             ->filter(function ($product) {
-                // Only show products that have stock
-                return $product['total_stock'] > 0;
-            });
+                return ($product['total_stock'] ?? 0) > 0;
+            })
+            ->values();
 
         return Inertia::render('Warehouse/WarehouseProducts', [
             'warehouse' => $warehouse,
@@ -168,7 +227,7 @@ class WarehouseController extends Controller
         ]);
     }
 
-    
+
     public function update(Request $request, $id)
     {
         $user = Auth::user();
@@ -176,8 +235,7 @@ class WarehouseController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:50|unique:warehouses,code,' . $id,
-            'address' => 'nullable|string',
+            'address' => 'required|string',
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email',
             'is_active' => 'boolean'
@@ -185,7 +243,9 @@ class WarehouseController extends Controller
 
         try {
             $warehouse = Warehouse::findOrFail($id);
-            $warehouse->update($request->all());
+            $warehouseData = $request->all();
+            $warehouseData['code'] = 'IN' . '-' . uniqid();
+            $warehouse->update($warehouseData);
 
             return redirect()->route('warehouse.list')->with(
                 'success',

@@ -24,6 +24,8 @@ class Customer extends Model
         'outlet_id'
     ];
 
+    const IS_ACTIVE = 1;
+
      protected static function booted()
     {
         static::addGlobalScope(new UserScope);

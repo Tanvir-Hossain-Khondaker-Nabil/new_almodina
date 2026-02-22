@@ -26,12 +26,21 @@ import {
     Ruler,
     AlertCircle,
     Calculator,
+    RotateCcw,
+    Package,
+    Layers,
+    Info,
+    Grid,
+    List,
+    Box,
+    Tag,
 } from "lucide-react";
 
 export default function AddSale({
     customers,
     productstocks,
     suppliers,
+    products,
     accounts,
     unitConversions = {
         weight: { ton: 1000, kg: 1, gram: 0.001, pound: 0.453592 },
@@ -45,9 +54,11 @@ export default function AddSale({
     const [productSearch, setProductSearch] = useState("");
     const [filteredProducts, setFilteredProducts] = useState([]);
     const [vatRate, setVatRate] = useState(0);
-    const [discountRate, setDiscountRate] = useState(0);
-    const [paidAmount, setPaidAmount] = useState(0);
-    const [shadowPaidAmount, setShadowPaidAmount] = useState(0);
+    const [discountType, setDiscountType] = useState("percentage");
+    const [flatDiscount, setFlatDiscount] = useState(null);
+    const [percentageDiscount, setPercentageDiscount] = useState(null);
+    const [paidAmount, setPaidAmount] = useState(null);
+    const [shadowPaidAmount, setShadowPaidAmount] = useState(null);
     const [selectedAccount, setSelectedAccount] = useState("");
     const [paymentStatus, setPaymentStatus] = useState("unpaid");
     const [manualPaymentOverride, setManualPaymentOverride] = useState(false);
@@ -61,33 +72,43 @@ export default function AddSale({
     const [showPickupModal, setShowPickupModal] = useState(false);
     const [showSupplierModal, setShowSupplierModal] = useState(false);
     const [pickupProductName, setPickupProductName] = useState("");
+    const [pickupProductNo, setPickupProductNo] = useState("");
     const [pickupBrand, setPickupBrand] = useState("");
     const [pickupVariant, setPickupVariant] = useState("");
-    const [pickupQuantity, setPickupQuantity] = useState(1);
-    const [pickupUnitPrice, setPickupUnitPrice] = useState(0);
-    const [pickupSalePrice, setPickupSalePrice] = useState(0);
     const [selectedSupplier, setSelectedSupplier] = useState(null);
     const [newSupplierName, setNewSupplierName] = useState("");
     const [newSupplierCompany, setNewSupplierCompany] = useState("");
     const [newSupplierPhone, setNewSupplierPhone] = useState("");
     const [showProductDropdown, setShowProductDropdown] = useState(false);
-    const [showBrandDropdown, setShowBrandDropdown] = useState(false);
-    const [showVariantDropdown, setShowVariantDropdown] = useState(false);
+
+    // State for product selection flow
     const [selectedProduct, setSelectedProduct] = useState(null);
-    const [selectedBrand, setSelectedBrand] = useState(null);
-    const [availableBrands, setAvailableBrands] = useState([]);
-    const [availableVariants, setAvailableVariants] = useState([]);
+    const [productVariants, setProductVariants] = useState([]);
+    const [showVariantModal, setShowVariantModal] = useState(false);
+    const [showBatchModal, setShowBatchModal] = useState(false);
+    const [selectedVariant, setSelectedVariant] = useState(null);
+    const [availableBatches, setAvailableBatches] = useState([]);
+    const [selectedBatch, setSelectedBatch] = useState(null);
     const [selectedUnits, setSelectedUnits] = useState({});
     const [unitQuantities, setUnitQuantities] = useState({});
     const [availableUnits, setAvailableUnits] = useState({});
     const [productDetails, setProductDetails] = useState({});
     const [stockDetails, setStockDetails] = useState({});
     const [basePrices, setBasePrices] = useState({});
+    const [priceManuallyEdited, setPriceManuallyEdited] = useState({});
 
-    // Batch selection modal state
-    const [showBatchModal, setShowBatchModal] = useState(false);
-    const [availableBatches, setAvailableBatches] = useState([]);
-    const [selectedVariantForBatch, setSelectedVariantForBatch] = useState(null);
+    // Installment payment state
+    const [installmentDuration, setInstallmentDuration] = useState(0);
+    const [totalInstallments, setTotalInstallments] = useState(0);
+
+    // Pickup state
+    const [pickupProductId, setPickupProductId] = useState("");
+    const [pickupVariantId, setPickupVariantId] = useState("");
+    const [pickupSupplierId, setPickupSupplierId] = useState("");
+    const [pickupVariants, setPickupVariants] = useState([]);
+    const [pickupQuantity, setPickupQuantity] = useState(1);
+    const [pickupUnitPrice, setPickupUnitPrice] = useState(0);
+    const [pickupSalePrice, setPickupSalePrice] = useState(0);
 
     // BARCODE SCANNER
     const barcodeRef = useRef(null);
@@ -103,6 +124,8 @@ export default function AddSale({
         items: [],
         vat_rate: 0,
         discount_rate: 0,
+        discount_type: "percentage",
+        flat_discount: 0,
         paid_amount: 0,
         grand_amount: 0,
         due_amount: 0,
@@ -115,6 +138,8 @@ export default function AddSale({
         supplier_id: null,
         payment_status: "unpaid",
         account_id: 0,
+        installment_duration: 0,
+        total_installments: 0,
     });
 
     // ========== HELPER FUNCTIONS ==========
@@ -134,7 +159,7 @@ export default function AddSale({
         }
     };
 
-    // ইউনিট কনভার্সন হেল্পার ফাংশন
+    // Unit conversion helper functions
     const getAvailableUnitsForProduct = (product, stock) => {
         if (!product) return ["piece"];
 
@@ -143,7 +168,6 @@ export default function AddSale({
 
         if (!conversions) return [product.default_unit || "piece"];
 
-        // Purchase unit থেকে smaller বা equal unit গুলো খুঁজে বের করি
         const purchaseUnit = stock?.unit || product.default_unit || "piece";
         const purchaseFactor = conversions[purchaseUnit] || 1;
 
@@ -155,7 +179,6 @@ export default function AddSale({
             }
         }
 
-        // ছোট থেকে বড় সাজাই (gram < kg < ton)
         return available.sort(
             (a, b) => (conversions[a] || 1) - (conversions[b] || 1)
         );
@@ -173,50 +196,37 @@ export default function AddSale({
         };
     };
 
-    // ✅ UPDATED: Base unit এ convert করা
     const convertToBase = (quantity, fromUnit, unitType) => {
         const conversions = unitConversions[unitType];
         if (!conversions || !conversions[fromUnit]) return quantity;
-
         return quantity * conversions[fromUnit];
     };
 
-    // ✅ UPDATED: Base unit থেকে নির্দিষ্ট unit এ convert করা
     const convertFromBase = (quantity, toUnit, unitType) => {
         const conversions = unitConversions[unitType];
         if (!conversions || !conversions[toUnit]) return quantity;
-
         const conversion = conversions[toUnit];
         return conversion !== 0 ? quantity / conversion : quantity;
     };
 
-    // ✅ UPDATED: Unit থেকে unit এ convert করা
     const convertUnitQuantity = (quantity, fromUnit, toUnit, unitType) => {
         if (fromUnit === toUnit) return quantity;
-
         const conversions = unitConversions[unitType];
         if (!conversions || !conversions[fromUnit] || !conversions[toUnit])
             return quantity;
-
         const baseQuantity = quantity * conversions[fromUnit];
         return baseQuantity / conversions[toUnit];
     };
 
-    // ✅ UPDATED: Auto Price Calculator - Unit change হলে price auto calculate হবে
     const calculatePriceForUnit = (basePricePerBaseUnit, targetUnit, unitType) => {
         const conversions = unitConversions[unitType];
         if (!conversions || !conversions[targetUnit]) return basePricePerBaseUnit;
-
-        // Base unit price * target unit conversion factor
         return basePricePerBaseUnit * conversions[targetUnit];
     };
 
-    // ✅ NEW: Calculate base price per base unit (সবচেয়ে ছোট unit)
     const calculateBasePricePerBaseUnit = (price, unit, unitType) => {
         const conversions = unitConversions[unitType];
         if (!conversions || !conversions[unit]) return price;
-
-        // Price কে base unit price এ convert করি
         return price / conversions[unit];
     };
 
@@ -248,8 +258,13 @@ export default function AddSale({
 
     const calculateDiscountAmount = useCallback(() => {
         const subtotal = calculateTotalSubTotal();
-        return (subtotal * (Number(discountRate) || 0)) / 100;
-    }, [calculateTotalSubTotal, discountRate]);
+        
+        if (discountType === "flat_discount") {
+            return Number(flatDiscount) || 0;
+        } else {
+            return (subtotal * (Number(percentageDiscount) || 0)) / 100;
+        }
+    }, [calculateTotalSubTotal, discountType, flatDiscount, percentageDiscount]);
 
     const calculateGrandTotal = useCallback(() => {
         const subtotal = calculateTotalSubTotal();
@@ -262,9 +277,10 @@ export default function AddSale({
         return Math.max(0, grandTotal - paid);
     }, [calculateGrandTotal, paidAmount]);
 
-    // ========== PRODUCT DATA ==========
+    // ========== PRODUCT DATA ORGANIZATION ==========
     const allProducts = useMemo(() => {
         if (!productstocks || productstocks.length === 0) return [];
+
         const productMap = new Map();
 
         productstocks.forEach((stock) => {
@@ -274,65 +290,506 @@ export default function AddSale({
             if (!productMap.has(productId)) {
                 productMap.set(productId, {
                     ...stock.product,
-                    totalStock: Number(stock.quantity) || 0,
-                    totalBaseStock:
-                        Number(stock.base_quantity) || Number(stock.quantity) || 0,
-                    variantsCount: 1,
-                    stocks: [stock],
+                    stocks: [],
+                    variants: new Map(),
                 });
-            } else {
-                const existing = productMap.get(productId);
-                existing.totalStock += Number(stock.quantity) || 0;
-                existing.totalBaseStock +=
-                    Number(stock.base_quantity) || Number(stock.quantity) || 0;
-                existing.variantsCount += 1;
-                existing.stocks.push(stock);
+            }
+
+            const product = productMap.get(productId);
+            product.stocks.push(stock);
+
+            if (stock.variant) {
+                const variantId = stock.variant.id;
+                if (!product.variants.has(variantId)) {
+                    product.variants.set(variantId, {
+                        variant: stock.variant,
+                        stocks: [],
+                        totalQuantity: 0,
+                        batches: new Map(),
+                    });
+                }
+
+                const variant = product.variants.get(variantId);
+                variant.stocks.push(stock);
+                variant.totalQuantity += Number(stock.quantity) || 0;
+
+                const batchKey = stock.batch_no || 'default';
+                if (!variant.batches.has(batchKey)) {
+                    variant.batches.set(batchKey, {
+                        batch_no: stock.batch_no,
+                        stocks: [],
+                        totalQuantity: 0,
+                        sale_price: stock.sale_price || 0,
+                        purchase_price: stock.purchase_price || 0,
+                    });
+                }
+
+                const batch = variant.batches.get(batchKey);
+                batch.stocks.push(stock);
+                batch.totalQuantity += Number(stock.quantity) || 0;
             }
         });
 
-        return Array.from(productMap.values()).sort((a, b) =>
-            a.name.localeCompare(b.name)
-        );
+        return Array.from(productMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     }, [productstocks]);
 
-    // ============================
-    // ✅ BARCODE INDEX (Batch -> Stock, SKU -> Stock, Code -> Product)
-    // ============================
-    const scanIndex = useMemo(() => {
-        const batchMap = new Map();
-        const skuMap = new Map();
-        const productCodeMap = new Map();
+    // ========== SEARCH FUNCTION - UPDATED ==========
+    useEffect(() => {
+        if (!productSearch.trim()) {
+            // When search is empty, show all products
+            setFilteredProducts(allProducts);
+            return;
+        }
 
-        // Product code map
-        allProducts.forEach((p) => {
-            if (p.product_no) productCodeMap.set(String(p.product_no).trim(), p);
-            if (p.code) productCodeMap.set(String(p.code).trim(), p);
+        const searchTerm = productSearch.toLowerCase();
+        const filtered = allProducts.filter((product) => {
+            return product.name.toLowerCase().includes(searchTerm) ||
+                (product.product_no && product.product_no.toLowerCase().includes(searchTerm));
         });
 
-        const pickBetter = (existing, incoming) => {
-            if (!existing) return incoming;
-            const exQty = Number(existing.quantity) || 0;
-            const inQty = Number(incoming.quantity) || 0;
-            if (exQty <= 0 && inQty > 0) return incoming;
-            return existing;
+        setFilteredProducts(filtered);
+        setShowProductDropdown(true);
+    }, [productSearch, allProducts]);
+
+    // Add this effect to control dropdown visibility based on focus
+    useEffect(() => {
+        // This effect ensures dropdown shows when there are products
+        if (allProducts.length > 0 && showProductDropdown) {
+            setFilteredProducts(allProducts);
+        }
+    }, [showProductDropdown, allProducts]);
+
+    // ========== PRODUCT SELECTION - SHOW ALL VARIANTS ==========
+    const handleProductSelect = (product) => {
+        setSelectedProduct(product);
+        setProductSearch(product.name);
+        setShowProductDropdown(false); // Close dropdown after selection
+
+        // Process variants
+        const variantsList = [];
+        product.variants.forEach((variantData, variantId) => {
+            const variant = variantData.variant;
+            const attributes = variant.attribute_values || {};
+
+            const attributePairs = Object.entries(attributes).map(([key, value]) => ({
+                key,
+                value
+            }));
+
+            // Group batches for this variant
+            const batches = [];
+            variantData.batches.forEach((batchData, batchNo) => {
+                batches.push({
+                    batch_no: batchData.batch_no,
+                    totalQuantity: batchData.totalQuantity,
+                    sale_price: batchData.sale_price,
+                    purchase_price: batchData.purchase_price,
+                    stocks: batchData.stocks,
+                    unit: batchData.stocks[0]?.unit || product.default_unit || 'piece',
+                });
+            });
+
+            variantsList.push({
+                id: variantId,
+                sku: variant.sku,
+                attributes: attributePairs,
+                totalStock: variantData.totalQuantity,
+                batches: batches,
+                unit: variantData.stocks[0]?.unit || product.default_unit || 'piece',
+            });
+        });
+
+        setProductVariants(variantsList);
+        setShowVariantModal(true);
+    };
+
+    // ========== VARIANT SELECTION - SHOW BATCHES ==========
+    const handleVariantSelect = (variant) => {
+        setSelectedVariant(variant);
+        setAvailableBatches(variant.batches);
+        setShowVariantModal(false);
+        setShowBatchModal(true);
+    };
+
+    // ========== BATCH SELECTION - ADD TO CART ==========
+    const handleBatchSelect = (batch) => {
+        setSelectedBatch(batch);
+        
+        // Get the first stock from this batch
+        const stock = batch.stocks[0];
+        if (!stock) {
+            alert("No stock available for this batch");
+            return;
+        }
+
+        const product = selectedProduct;
+        const variant = selectedVariant;
+
+        // Add to cart with this specific batch
+        addToCart(product, variant, batch, stock);
+        
+        setShowBatchModal(false);
+    };
+
+    // ========== ADD TO CART ==========
+    const addToCart = (product, variant, batch, stock) => {
+        const selectedSalePrice = Number(batch.sale_price) || Number(stock.sale_price) || 0;
+
+        // Get product details
+        const pDetails = getProductDetails(product.id);
+        setProductDetails((prev) => ({
+            ...prev,
+            [product.id]: pDetails,
+        }));
+
+        // Get available units
+        const availableUnitsForStock = getAvailableUnitsForProduct(product, stock);
+
+        // Determine default sale unit
+        let defaultUnit = pDetails?.min_sale_unit || product.default_unit || "piece";
+        if (!availableUnitsForStock.includes(defaultUnit)) {
+            defaultUnit = availableUnitsForStock[0] || "piece";
+        }
+
+        // Calculate base price
+        let basePricePerBaseUnit = selectedSalePrice;
+        if (pDetails?.unit_type && pDetails.unit_type !== "piece") {
+            basePricePerBaseUnit = calculateBasePricePerBaseUnit(
+                selectedSalePrice,
+                stock.unit || 'piece',
+                pDetails.unit_type
+            );
+        }
+
+        // Calculate price in sale unit
+        let unitPriceInSaleUnit = selectedSalePrice;
+        if (stock.unit !== defaultUnit && pDetails?.unit_type) {
+            unitPriceInSaleUnit = calculatePriceForUnit(
+                basePricePerBaseUnit,
+                defaultUnit,
+                pDetails.unit_type
+            );
+        }
+
+        // Create attribute display
+        const attributeDisplay = variant.attributes
+            .map(attr => `${attr.key}: ${attr.value}`)
+            .join(' | ');
+
+        // Create unique key with batch number
+        const itemKey = `${product.id}-${variant.id}-${batch.batch_no || "default"}`;
+        const existingItem = selectedItems.find((item) => item.uniqueKey === itemKey);
+
+        if (existingItem) {
+            // Update existing item
+            const newQuantity = (existingItem.unit_quantity || 1) + 1;
+            const newTotalPrice = newQuantity * existingItem.unit_price;
+
+            setSelectedItems(
+                selectedItems.map((item) =>
+                    item.uniqueKey === itemKey
+                        ? {
+                            ...item,
+                            unit_quantity: newQuantity,
+                            quantity: newQuantity,
+                            total_price: newTotalPrice,
+                        }
+                        : item
+                )
+            );
+            setUnitQuantities((prev) => ({ ...prev, [itemKey]: newQuantity }));
+        } else {
+            // Add new item
+            const newItem = {
+                uniqueKey: itemKey,
+                product_id: product.id,
+                variant_id: variant.id,
+                batch_no: batch.batch_no,
+                product_name: product.name,
+                product_no: product.product_no,
+                variant_attribute: attributeDisplay,
+                product_code: product.product_no || "",
+                quantity: 1,
+                unit_quantity: 1,
+                unit: defaultUnit,
+                sku: variant.sku || "Default SKU",
+                stockQuantity: Number(batch.totalQuantity) || 0,
+                stockBaseQuantity: Number(stock.base_quantity) || Number(batch.totalQuantity) || 0,
+                stockId: stock.id,
+                original_purchase_unit: stock.unit || 'piece',
+                original_sale_price: selectedSalePrice,
+                unit_price: unitPriceInSaleUnit,
+                sell_price: unitPriceInSaleUnit,
+                total_price: unitPriceInSaleUnit,
+                product_unit_type: pDetails?.unit_type || "piece",
+                is_fraction_allowed: pDetails?.is_fraction_allowed || false,
+                stockDetails: stock,
+                base_price_per_base_unit: basePricePerBaseUnit,
+            };
+
+            setSelectedItems([...selectedItems, newItem]);
+            setSelectedUnits((prev) => ({ ...prev, [itemKey]: defaultUnit }));
+            setUnitQuantities((prev) => ({ ...prev, [itemKey]: 1 }));
+            setAvailableUnits((prev) => ({
+                ...prev,
+                [itemKey]: availableUnitsForStock,
+            }));
+            setStockDetails((prev) => ({ ...prev, [itemKey]: stock }));
+            setBasePrices((prev) => ({
+                ...prev,
+                [itemKey]: basePricePerBaseUnit,
+            }));
+            setPriceManuallyEdited((prev) => ({ ...prev, [itemKey]: false }));
+        }
+
+        // Reset selection
+        setSelectedProduct(null);
+        setSelectedVariant(null);
+        setSelectedBatch(null);
+        setProductSearch("");
+    };
+
+    // ========== BARCODE SCAN HANDLERS ==========
+    const handleBarcodeScan = useCallback(
+        (raw) => {
+            const code = String(raw || "").trim();
+            if (!code) return;
+
+            setScanError("");
+
+            const product = allProducts.find(p => p.product_no === code || p.code === code);
+            if (product) {
+                handleProductSelect(product);
+                return;
+            }
+
+            setScanError(`No product found for: ${code}`);
+        },
+        [allProducts]
+    );
+
+    const SCAN_TIMEOUT = 100;
+    const barcodeRefNew = useRef("");
+    const lastScanTimeRef = useRef(0);
+
+    useEffect(() => {
+        const handleKeydown = (e) => {
+            const target = e.target;
+            const tag = target?.tagName;
+
+            const isTypingField =
+                tag === "INPUT" ||
+                tag === "TEXTAREA" ||
+                tag === "SELECT" ||
+                target?.isContentEditable;
+
+            if (isTypingField) return;
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+            const now = Date.now();
+
+            if (e.key === "Enter") {
+                if (barcodeRefNew.current.length > 0) {
+                    e.preventDefault();
+                    handleBarcodeScan(barcodeRefNew.current);
+                    barcodeRefNew.current = "";
+                }
+                return;
+            }
+
+            if (e.key.length === 1) {
+                if (now - lastScanTimeRef.current > SCAN_TIMEOUT) {
+                    barcodeRefNew.current = e.key;
+                } else {
+                    barcodeRefNew.current += e.key;
+                }
+                lastScanTimeRef.current = now;
+            }
         };
 
-        (productstocks || []).forEach((s) => {
-            if (!s?.product || !s?.variant) return;
+        window.addEventListener("keydown", handleKeydown, { passive: false });
+        return () => window.removeEventListener("keydown", handleKeydown);
+    }, [handleBarcodeScan]);
 
-            if (s.batch_no) {
-                const key = String(s.batch_no).trim();
-                batchMap.set(key, pickBetter(batchMap.get(key), s));
+    // ========== UNIT CHANGE HANDLER ==========
+    const handleUnitChange = (itemKey, newUnit) => {
+        const itemIndex = selectedItems.findIndex(
+            (item) => item.uniqueKey === itemKey
+        );
+        if (itemIndex === -1) return;
+
+        const item = selectedItems[itemIndex];
+        const oldUnit = item.unit;
+
+        if (oldUnit === newUnit) return;
+
+        const availableUnitsList = availableUnits[itemKey] || [item.unit];
+        if (!availableUnitsList.includes(newUnit)) {
+            alert(`Cannot sell in ${newUnit.toUpperCase()} unit for this product`);
+            return;
+        }
+
+        let newQuantity = item.unit_quantity;
+
+        if (item.product_unit_type && item.product_unit_type !== "piece") {
+            newQuantity = convertUnitQuantity(
+                item.unit_quantity,
+                oldUnit,
+                newUnit,
+                item.product_unit_type
+            );
+
+            const requestedBaseQty = convertToBase(
+                newQuantity,
+                newUnit,
+                item.product_unit_type
+            );
+            const availableBaseQty =
+                item.stockDetails?.base_quantity || item.stockBaseQuantity;
+
+            if (requestedBaseQty > availableBaseQty) {
+                const availableInUnit = convertFromBase(
+                    availableBaseQty,
+                    newUnit,
+                    item.product_unit_type
+                );
+                alert(
+                    `Cannot change unit. Exceeds available stock! Available: ${availableInUnit.toFixed(
+                        3
+                    )} ${newUnit.toUpperCase()}`
+                );
+                return;
+            }
+        }
+
+        let newPrice = item.unit_price;
+
+        if (!priceManuallyEdited[itemKey]) {
+            if (item.product_unit_type && item.product_unit_type !== "piece") {
+                newPrice = calculatePriceForUnit(
+                    item.base_price_per_base_unit,
+                    newUnit,
+                    item.product_unit_type
+                );
+            }
+        }
+
+        const updatedItems = [...selectedItems];
+        updatedItems[itemIndex] = {
+            ...item,
+            unit: newUnit,
+            unit_quantity: newQuantity,
+            quantity: newQuantity,
+            unit_price: newPrice,
+            sell_price: newPrice,
+            total_price: newQuantity * newPrice,
+        };
+
+        setSelectedItems(updatedItems);
+        setSelectedUnits((prev) => ({ ...prev, [itemKey]: newUnit }));
+        setUnitQuantities((prev) => ({ ...prev, [itemKey]: newQuantity }));
+    };
+
+    // ========== UPDATE ITEM ==========
+    const updateItem = (index, field, value) => {
+        const updated = [...selectedItems];
+        const item = updated[index];
+        const itemKey = item.uniqueKey;
+
+        if (field === "unit_quantity" || field === "quantity") {
+            const numValue = parseFloat(value) || 0;
+
+            if (!item.is_fraction_allowed && numValue % 1 !== 0) {
+                alert("Fractions are not allowed for this product");
+                return;
             }
 
-            if (s.variant?.sku) {
-                const key = String(s.variant.sku).trim();
-                skuMap.set(key, pickBetter(skuMap.get(key), s));
-            }
-        });
+            if (item.product_unit_type && item.product_unit_type !== "piece") {
+                const requestedBaseQty = convertToBase(
+                    numValue,
+                    item.unit || "piece",
+                    item.product_unit_type
+                );
+                const availableBaseQty =
+                    item.stockDetails?.base_quantity || item.stockBaseQuantity;
 
-        return { batchMap, skuMap, productCodeMap };
-    }, [productstocks, allProducts]);
+                if (requestedBaseQty > availableBaseQty) {
+                    const availableInUnit = convertFromBase(
+                        availableBaseQty,
+                        item.unit,
+                        item.product_unit_type
+                    );
+                    alert(
+                        `Exceeds available stock! Available: ${availableInUnit.toFixed(3)} ${item.unit.toUpperCase()}`
+                    );
+                    return;
+                }
+            } else if (numValue > item.stockQuantity) {
+                alert(`Exceeds available stock! Available: ${item.stockQuantity}`);
+                return;
+            }
+
+            updated[index][field] = numValue;
+            updated[index].quantity = numValue;
+            setUnitQuantities((prev) => ({ ...prev, [itemKey]: numValue }));
+            updated[index].total_price = numValue * updated[index].unit_price;
+        }
+        else if (field === "unit_price" || field === "sell_price") {
+            const numValue = parseFloat(value) || 0;
+
+            if (numValue < 0) {
+                alert("Unit price cannot be negative");
+                return;
+            }
+
+            updated[index].unit_price = numValue;
+            updated[index].sell_price = numValue;
+            updated[index].total_price = updated[index].quantity * numValue;
+            setPriceManuallyEdited((prev) => ({ ...prev, [itemKey]: true }));
+
+            if (item.product_unit_type && item.product_unit_type !== "piece") {
+                const newBasePricePerBaseUnit = calculateBasePricePerBaseUnit(
+                    numValue,
+                    item.unit,
+                    item.product_unit_type
+                );
+                updated[index].base_price_per_base_unit = newBasePricePerBaseUnit;
+                setBasePrices((prev) => ({ ...prev, [itemKey]: newBasePricePerBaseUnit }));
+            }
+        }
+
+        setSelectedItems(updated);
+    };
+
+    // ========== REMOVE ITEM ==========
+    const removeItem = (index) => {
+        const updated = [...selectedItems];
+        const itemKey = updated[index].uniqueKey;
+
+        const newSelectedUnits = { ...selectedUnits };
+        const newUnitQuantities = { ...unitQuantities };
+        const newAvailableUnits = { ...availableUnits };
+        const newStockDetails = { ...stockDetails };
+        const newBasePrices = { ...basePrices };
+        const newPriceManuallyEdited = { ...priceManuallyEdited };
+
+        delete newSelectedUnits[itemKey];
+        delete newUnitQuantities[itemKey];
+        delete newAvailableUnits[itemKey];
+        delete newStockDetails[itemKey];
+        delete newBasePrices[itemKey];
+        delete newPriceManuallyEdited[itemKey];
+
+        setSelectedUnits(newSelectedUnits);
+        setUnitQuantities(newUnitQuantities);
+        setAvailableUnits(newAvailableUnits);
+        setStockDetails(newStockDetails);
+        setBasePrices(newBasePrices);
+        setPriceManuallyEdited(newPriceManuallyEdited);
+
+        updated.splice(index, 1);
+        setSelectedItems(updated);
+    };
 
     // ========== CUSTOMER HANDLING ==========
     const handleCustomerSelect = (value) => {
@@ -427,37 +884,44 @@ export default function AddSale({
             setPaidAmount(grandTotal);
             setManualPaymentOverride(false);
             setAdjustFromAdvance(false);
+            setTotalInstallments(0);
+            setInstallmentDuration(0);
         } else if (status === "unpaid") {
             setPaidAmount(0);
             setManualPaymentOverride(false);
             setAdjustFromAdvance(false);
+            setTotalInstallments(0);
+            setInstallmentDuration(0);
         } else if (status === "partial") {
             setPaidAmount(grandTotal / 2);
             setManualPaymentOverride(true);
             setAdjustFromAdvance(false);
+            setTotalInstallments(0);
+            setInstallmentDuration(0);
+        } else if (status === "installment") {
+            setPaidAmount(grandTotal / 3);
+            setManualPaymentOverride(true);
+            setAdjustFromAdvance(false);
+            setTotalInstallments(3);
+            setInstallmentDuration(3);
         }
     };
 
     const handleManualPaymentInput = (e) => {
         const value = parseFloat(e.target.value) || 0;
-        const grandTotal = calculateGrandTotal();
         setPaidAmount(value);
-
-        if (value === 0) setPaymentStatus("unpaid");
-        else if (value >= grandTotal) setPaymentStatus("paid");
-        else setPaymentStatus("partial");
     };
 
-    const enableManualPaymentOverride = () => {
-        setManualPaymentOverride(true);
-        setAdjustFromAdvance(false);
+    const handleTotalInstallmentsInput = (e) => {
+        const value = parseInt(e.target.value) || 0;
+        setTotalInstallments(value);
+        form.setData("total_installments", value);
     };
 
-    const disableManualPaymentOverride = () => {
-        setManualPaymentOverride(false);
-        const grandTotal = calculateGrandTotal();
-        setPaidAmount(grandTotal);
-        setPaymentStatus("paid");
+    const handleInstallmentDurationInput = (e) => {
+        const value = parseInt(e.target.value) || 0;
+        setInstallmentDuration(value);
+        form.setData("installment_duration", value);
     };
 
     const handleAccountSelect = (accountId) => {
@@ -466,664 +930,46 @@ export default function AddSale({
         form.setData("account_id", id);
     };
 
-    // ========== PRODUCT SELECTION FLOW ==========
-    useEffect(() => {
-        if (!productSearch.trim()) {
-            setFilteredProducts(allProducts);
-            return;
-        }
+    // ========== PICKUP FUNCTIONS ==========
+    const handlePickupProductChange = (productId) => {
+        setPickupProductId(productId);
 
-        const searchTerm = productSearch.toLowerCase();
-        const filtered = allProducts.filter(
-            (product) =>
-                product.name.toLowerCase().includes(searchTerm) ||
-                product.product_no?.toLowerCase().includes(searchTerm) ||
-                product.code?.toLowerCase().includes(searchTerm)
-        );
+        const p = products?.find((x) => String(x.id) === String(productId));
+        setPickupProductName(p?.name || "");
+        setPickupProductNo(p?.product_no || "");
 
-        setFilteredProducts(filtered);
-    }, [productSearch, allProducts]);
-
-    const getBrandsForProduct = (productId) => {
-        if (!productstocks || !productId) return [];
-        const brandSet = new Set();
-
-        productstocks
-            .filter((stock) => stock.product?.id === productId && stock.quantity > 0)
-            .forEach((stock) => {
-                const variant = stock.variant;
-                if (
-                    variant &&
-                    variant.attribute_values &&
-                    typeof variant.attribute_values === "object"
-                ) {
-                    Object.keys(variant.attribute_values).forEach((key) =>
-                        brandSet.add(key)
-                    );
-                }
-            });
-
-        return Array.from(brandSet).sort();
+        const vars = p?.variants || [];
+        setPickupVariants(vars);
+        setPickupVariantId("");
     };
 
-    const getVariantsForBrand = (productId, brandName) => {
-        if (!productstocks || !productId) return [];
-        const variants = [];
-
-        productstocks
-            .filter((stock) => stock.product?.id === productId && stock.quantity > 0)
-            .forEach((stock) => {
-                const variant = stock.variant;
-                if (
-                    variant &&
-                    variant.attribute_values &&
-                    typeof variant.attribute_values === "object"
-                ) {
-                    if (!brandName || variant.attribute_values[brandName]) {
-                        const existingVariant = variants.find((v) => v.variant?.id === variant.id);
-                        if (!existingVariant) {
-                            variants.push({
-                                variant,
-                                stocks: [stock],
-                                totalQuantity: Number(stock.quantity) || 0,
-                                totalBaseQuantity:
-                                    Number(stock.base_quantity) || Number(stock.quantity) || 0,
-                                batch_no: stock.batch_no,
-                                sale_price: stock.sale_price,
-                                shadow_sale_price: stock.shadow_sale_price,
-                                unit: stock.unit || stock.product?.default_unit || "piece",
-                                product: stock.product,
-                                stockId: stock.id,
-                            });
-                        } else {
-                            existingVariant.stocks.push(stock);
-                            existingVariant.totalQuantity += Number(stock.quantity) || 0;
-                            existingVariant.totalBaseQuantity +=
-                                Number(stock.base_quantity) || Number(stock.quantity) || 0;
-                        }
-                    }
-                }
-            });
-
-        return variants.sort((a, b) => b.totalQuantity - a.totalQuantity);
-    };
-
-    const handleProductSelect = (product) => {
-        setSelectedProduct(product);
-        setSelectedBrand(null);
-        setAvailableVariants([]);
-
-        const brands = getBrandsForProduct(product.id);
-        setAvailableBrands(brands);
-
-        if (brands.length > 0) {
-            setShowBrandDropdown(true);
-            setShowProductDropdown(false);
-            setProductSearch(product.name);
-        } else {
-            const variants = getVariantsForBrand(product.id, "");
-            setAvailableVariants(variants);
-            setShowVariantDropdown(true);
-            setShowProductDropdown(false);
-        }
-    };
-
-    const handleBrandSelect = (brand) => {
-        setSelectedBrand(brand);
-        const variants = getVariantsForBrand(selectedProduct.id, brand);
-        setAvailableVariants(variants);
-
-        setShowBrandDropdown(false);
-        setShowVariantDropdown(true);
-        setProductSearch(`${selectedProduct.name} - ${brand}`);
-    };
-
-    const resetSelectionFlow = () => {
-        setSelectedProduct(null);
-        setSelectedBrand(null);
-        setAvailableBrands([]);
-        setAvailableVariants([]);
-        setShowProductDropdown(false);
-        setShowBrandDropdown(false);
-        setShowVariantDropdown(false);
-        setProductSearch("");
-    };
-
-    const goBackToProducts = () => {
-        setSelectedProduct(null);
-        setSelectedBrand(null);
-        setAvailableBrands([]);
-        setAvailableVariants([]);
-        setShowBrandDropdown(false);
-        setShowVariantDropdown(false);
-        setShowProductDropdown(true);
-        setProductSearch("");
-    };
-
-    const goBackToBrands = () => {
-        setSelectedBrand(null);
-        setAvailableVariants([]);
-        setShowVariantDropdown(false);
-        setShowBrandDropdown(true);
-    };
-
-    // ============================================
-    // ✅ Helper: stockRow -> variantWithStocks (for barcode)
-    // ============================================
-    function buildVariantWithStocksFromStockRow(stockRow) {
-        if (!stockRow?.product || !stockRow?.variant) return null;
-
-        const relatedStocks = (productstocks || []).filter(
-            (s) =>
-                s.product?.id === stockRow.product.id &&
-                s.variant?.id === stockRow.variant.id
-        );
-
-        const totalQuantity = relatedStocks.reduce(
-            (t, s) => t + (Number(s.quantity) || 0),
-            0
-        );
-
-        const totalBaseQuantity = relatedStocks.reduce(
-            (t, s) => t + (Number(s.base_quantity) || Number(s.quantity) || 0),
-            0
-        );
-
-        return {
-            variant: stockRow.variant,
-            stocks: relatedStocks.length ? relatedStocks : [stockRow],
-            totalQuantity,
-            totalBaseQuantity,
-            batch_no: stockRow.batch_no,
-            sale_price: stockRow.sale_price,
-            shadow_sale_price: stockRow.shadow_sale_price,
-            unit: stockRow.unit || stockRow.product?.default_unit || "piece",
-            product: stockRow.product,
-            stockId: stockRow.id,
-        };
-    }
-
-    // ============================================
-    // ✅ IMPORTANT: handleVariantSelect MUST be defined BEFORE barcode handlers
-    // ============================================
-    function handleVariantSelect(variantWithStocks) {
-        const {
-            variant,
-            stocks,
-            totalQuantity,
-            totalBaseQuantity,
-            sale_price,
-            shadow_sale_price,
-            unit,
-            product,
-            stockId,
-        } = variantWithStocks;
-
-        // Find ALL available stocks for this variant
-        const availableStocks = stocks.filter((s) => s.quantity > 0);
-
-        if (availableStocks.length === 0) {
-            alert("No available stock for this variant");
-            return;
-        }
-
-        // If multiple batches exist, show batch selection modal
-        if (availableStocks.length > 1) {
-            setShowBatchModal(true);
-            setAvailableBatches(availableStocks);
-            setSelectedVariantForBatch({
-                variant,
-                stocks: availableStocks,
-                totalQuantity,
-                totalBaseQuantity,
-                sale_price,
-                shadow_sale_price,
-                unit,
-                product,
-                stockId,
-            });
-            return;
-        }
-
-        // Single batch - proceed directly
-        const availableStock = availableStocks[0];
-        proceedWithStockSelection(availableStock, variantWithStocks);
-    }
-
-    // Function to proceed with stock selection after batch is chosen
-    const proceedWithStockSelection = (selectedStock, variantWithStocks) => {
-        const {
-            variant,
-            sale_price,
-            shadow_sale_price,
-            unit,
-            product,
-        } = variantWithStocks;
-
-        const selectedSalePrice = Number(selectedStock.sale_price) || Number(sale_price) || 0;
-        const selectedShadowSalePrice =
-            Number(selectedStock.shadow_sale_price) ||
-            Number(shadow_sale_price) || 0;
-
-        // Get product details
-        const pDetails = getProductDetails(product.id);
-        setProductDetails((prev) => ({
-            ...prev,
-            [product.id]: pDetails,
-        }));
-
-        // Get available units for this specific stock
-        const availableUnitsForStock = getAvailableUnitsForProduct(
-            product,
-            selectedStock
-        );
-
-        // Determine default sale unit
-        let defaultUnit = pDetails?.min_sale_unit || product.default_unit || "piece";
-        if (!availableUnitsForStock.includes(defaultUnit)) {
-            defaultUnit = availableUnitsForStock[0] || "piece";
-        }
-
-        // Calculate base price per base unit
-        let basePricePerBaseUnit = selectedSalePrice;
-        if (pDetails?.unit_type && pDetails.unit_type !== "piece") {
-            basePricePerBaseUnit = calculateBasePricePerBaseUnit(
-                selectedSalePrice,
-                unit,
-                pDetails.unit_type
-            );
-        }
-
-        // Calculate price in sale unit using base price
-        let unitPriceInSaleUnit = selectedSalePrice;
-        if (unit !== defaultUnit && pDetails?.unit_type) {
-            unitPriceInSaleUnit = calculatePriceForUnit(
-                basePricePerBaseUnit,
-                defaultUnit,
-                pDetails.unit_type
-            );
-        }
-
-        // Create unique key with batch number
-        const itemKey = `${product.id}-${variant.id}-${selectedStock.batch_no || "default"}`;
-        const existingItem = selectedItems.find((item) => item.uniqueKey === itemKey);
-
-        if (existingItem) {
-            // Update existing item
-            const newQuantity = (existingItem.unit_quantity || 1) + 1;
-            const newTotalPrice = newQuantity * existingItem.unit_price;
-
-            setSelectedItems(
-                selectedItems.map((item) =>
-                    item.uniqueKey === itemKey
-                        ? {
-                            ...item,
-                            unit_quantity: newQuantity,
-                            quantity: newQuantity,
-                            total_price: newTotalPrice,
-                        }
-                        : item
-                )
-            );
-            setUnitQuantities((prev) => ({ ...prev, [itemKey]: newQuantity }));
-        } else {
-            // Add new item
-            const newItem = {
-                uniqueKey: itemKey,
-                product_id: product.id,
-                variant_id: variant.id,
-                batch_no: selectedStock.batch_no,
-                product_name: product.name,
-                variant_attribute:
-                    selectedBrand ||
-                    Object.keys(variant.attribute_values || {})[0] ||
-                    "Default",
-                product_code: product.product_no || "",
-                variant_value: selectedBrand
-                    ? variant.attribute_values?.[selectedBrand] || "Default"
-                    : Object.values(variant.attribute_values || {})[0] || "Default",
-                quantity: 1,
-                unit_quantity: 1,
-                unit: defaultUnit,
-                sku: variant.sku || "Default SKU",
-                stockQuantity: Number(selectedStock.quantity) || 0,
-                stockBaseQuantity: Number(selectedStock.base_quantity) || Number(selectedStock.quantity) || 0,
-                stockId: selectedStock.id,
-                original_purchase_unit: unit,
-                original_sale_price: selectedSalePrice,
-                unit_price: unitPriceInSaleUnit,
-                sell_price: unitPriceInSaleUnit,
-                total_price: unitPriceInSaleUnit,
-                shadow_sell_price: selectedShadowSalePrice,
-                product_unit_type: pDetails?.unit_type || "piece",
-                is_fraction_allowed: pDetails?.is_fraction_allowed || false,
-                stockDetails: selectedStock,
-                base_price_per_base_unit: basePricePerBaseUnit,
-            };
-
-            setSelectedItems([...selectedItems, newItem]);
-            setSelectedUnits((prev) => ({ ...prev, [itemKey]: defaultUnit }));
-            setUnitQuantities((prev) => ({ ...prev, [itemKey]: 1 }));
-            setAvailableUnits((prev) => ({
-                ...prev,
-                [itemKey]: availableUnitsForStock,
-            }));
-            setStockDetails((prev) => ({ ...prev, [itemKey]: selectedStock }));
-            setBasePrices((prev) => ({
-                ...prev,
-                [itemKey]: basePricePerBaseUnit,
-            }));
-        }
-
-        resetSelectionFlow();
-    };
-
-    // Batch selection handler
-    const handleBatchSelect = (selectedStock) => {
-        if (!selectedVariantForBatch || !selectedStock) return;
-
-        proceedWithStockSelection(selectedStock, selectedVariantForBatch);
-
-        // Close batch modal and reset
-        setShowBatchModal(false);
-        setAvailableBatches([]);
-        setSelectedVariantForBatch(null);
-    };
-
-    // ✅ UPDATED: Handle unit change with auto price calculation
-    const handleUnitChange = (itemKey, newUnit) => {
-        const itemIndex = selectedItems.findIndex(
-            (item) => item.uniqueKey === itemKey
-        );
-        if (itemIndex === -1) return;
-
-        const item = selectedItems[itemIndex];
-        const oldUnit = item.unit;
-
-        if (oldUnit === newUnit) return;
-
-        const availableUnitsList = availableUnits[itemKey] || [item.unit];
-        if (!availableUnitsList.includes(newUnit)) {
-            alert(`Cannot sell in ${newUnit.toUpperCase()} unit for this product`);
-            return;
-        }
-
-        // Convert quantity to new unit
-        let newQuantity = item.unit_quantity;
-
-        if (item.product_unit_type && item.product_unit_type !== "piece") {
-            newQuantity = convertUnitQuantity(
-                item.unit_quantity,
-                oldUnit,
-                newUnit,
-                item.product_unit_type
-            );
-
-            // Validate stock in new unit
-            const requestedBaseQty = convertToBase(
-                newQuantity,
-                newUnit,
-                item.product_unit_type
-            );
-            const availableBaseQty =
-                item.stockDetails?.base_quantity || item.stockBaseQuantity;
-
-            if (requestedBaseQty > availableBaseQty) {
-                const availableInUnit = convertFromBase(
-                    availableBaseQty,
-                    newUnit,
-                    item.product_unit_type
-                );
-                alert(
-                    `Cannot change unit. Exceeds available stock! Available: ${availableInUnit.toFixed(
-                        3
-                    )} ${newUnit.toUpperCase()}`
-                );
-                return;
-            }
-        }
-
-        // ✅ AUTO CALCULATE NEW PRICE BASED ON BASE PRICE
-        let newPrice = item.unit_price;
-
-        if (item.product_unit_type && item.product_unit_type !== "piece") {
-            // Calculate price in new unit based on base price per base unit
-            newPrice = calculatePriceForUnit(
-                item.base_price_per_base_unit, // Base unit price
-                newUnit, // New sale unit
-                item.product_unit_type
-            );
-        }
-
-        // Update item
-        const updatedItems = [...selectedItems];
-        updatedItems[itemIndex] = {
-            ...item,
-            unit: newUnit,
-            unit_quantity: newQuantity,
-            quantity: newQuantity,
-            unit_price: newPrice, // Auto-calculated price
-            sell_price: newPrice,
-            total_price: newQuantity * newPrice,
-        };
-
-        setSelectedItems(updatedItems);
-        setSelectedUnits((prev) => ({ ...prev, [itemKey]: newUnit }));
-        setUnitQuantities((prev) => ({ ...prev, [itemKey]: newQuantity }));
-    };
-
-    const removeItem = (index) => {
-        const updated = [...selectedItems];
-        const itemKey = updated[index].uniqueKey;
-
-        // Clean up unit states
-        const newSelectedUnits = { ...selectedUnits };
-        const newUnitQuantities = { ...unitQuantities };
-        const newAvailableUnits = { ...availableUnits };
-        const newStockDetails = { ...stockDetails };
-        const newBasePrices = { ...basePrices };
-
-        delete newSelectedUnits[itemKey];
-        delete newUnitQuantities[itemKey];
-        delete newAvailableUnits[itemKey];
-        delete newStockDetails[itemKey];
-        delete newBasePrices[itemKey];
-
-        setSelectedUnits(newSelectedUnits);
-        setUnitQuantities(newUnitQuantities);
-        setAvailableUnits(newAvailableUnits);
-        setStockDetails(newStockDetails);
-        setBasePrices(newBasePrices);
-
-        updated.splice(index, 1);
-        setSelectedItems(updated);
-    };
-
-    // ✅ UPDATED: Make unit_price read-only, only quantity can be changed
-    const updateItem = (index, field, value) => {
-        const updated = [...selectedItems];
-        const item = updated[index];
-        const itemKey = item.uniqueKey;
-
-        if (field === "unit_quantity" || field === "quantity") {
-            const numValue = parseFloat(value) || 0;
-
-            // Validate if fractions are allowed
-            if (!item.is_fraction_allowed && numValue % 1 !== 0) {
-                alert("Fractions are not allowed for this product");
-                return;
-            }
-
-            // Validate against available stock
-            if (item.product_unit_type && item.product_unit_type !== "piece") {
-                const requestedBaseQty = convertToBase(
-                    numValue,
-                    item.unit || "piece",
-                    item.product_unit_type
-                );
-                const availableBaseQty =
-                    item.stockDetails?.base_quantity || item.stockBaseQuantity;
-
-                if (requestedBaseQty > availableBaseQty) {
-                    const availableInUnit = convertFromBase(
-                        availableBaseQty,
-                        item.unit,
-                        item.product_unit_type
-                    );
-                    alert(
-                        `Exceeds available stock! Available: ${availableInUnit.toFixed(3)} ${item.unit.toUpperCase()}`
-                    );
-                    return;
-                }
-            } else if (numValue > item.stockQuantity) {
-                alert(`Exceeds available stock! Available: ${item.stockQuantity}`);
-                return;
-            }
-
-            updated[index][field] = numValue;
-            updated[index].quantity = numValue;
-            setUnitQuantities((prev) => ({ ...prev, [itemKey]: numValue }));
-
-            // Recalculate total price with auto-calculated unit price
-            updated[index].total_price = numValue * updated[index].unit_price;
-        } else if (field === "unit_price" || field === "sell_price") {
-            alert(
-                "Unit price is auto-calculated based on unit selection. Change the unit to change the price."
-            );
-            return;
-        }
-
-        setSelectedItems(updated);
-    };
-
-    // ============================================
-    // ✅ BARCODE SCAN HANDLERS (Batch No first)
-    // ============================================
-    const handleBarcodeScan = useCallback(
-        (raw) => {
-            const code = String(raw || "").trim();
-            if (!code) return;
-
-            setScanError("");
-
-            // 1) ✅ Batch No
-            const batchStock = scanIndex.batchMap.get(code);
-            if (batchStock) {
-                const vws = buildVariantWithStocksFromStockRow(batchStock);
-                if (vws) {
-                    handleVariantSelect(vws);
-                    return;
-                }
-            }
-
-            // 2) ✅ SKU
-            const skuStock = scanIndex.skuMap.get(code);
-            if (skuStock) {
-                const vws = buildVariantWithStocksFromStockRow(skuStock);
-                if (vws) {
-                    handleVariantSelect(vws);
-                    return;
-                }
-            }
-
-            // 3) ✅ Product Code -> open selection flow
-            const product = scanIndex.productCodeMap.get(code);
-            if (product) {
-                setProductSearch(product.name);
-                setShowProductDropdown(false);
-                handleProductSelect(product);
-                return;
-            }
-
-            setScanError(`No match found for: ${code}`);
-        },
-        [scanIndex, handleProductSelect, buildVariantWithStocksFromStockRow]
-    );
-
-    // FIXED: Barcode scanner - only intercept when not focused on input/textarea/select
-    const SCAN_TIMEOUT = 100;
-    const barcodeBufferRef = useRef("");
-    const lastKeyTimeRef = useRef(0);
-
-    useEffect(() => {
-        const handleKeydown = (e) => {
-            const tag = e.target.tagName;
-            const isTypingField =
-                tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target.isContentEditable;
-
-            const now = Date.now();
-            const fast = now - lastKeyTimeRef.current <= SCAN_TIMEOUT;
-
-            // ✅ If scanner is sending fast keys, we treat it as scanning mode
-            const isScanningMode = fast || barcodeBufferRef.current.length > 0;
-
-            // ✅ ENTER: end of scan
-            if (e.key === "Enter") {
-                // If we have buffered scan chars, this Enter is scanner-enter
-                if (barcodeBufferRef.current.length > 0) {
-                    e.preventDefault();      // ✅ stops form submit
-                    e.stopPropagation();
-
-                    const scanned = barcodeBufferRef.current;
-                    barcodeBufferRef.current = "";
-                    lastKeyTimeRef.current = 0;
-
-                    handleBarcodeScan(scanned);
-                }
-                return;
-            }
-
-            // ✅ character key
-            if (e.key.length === 1) {
-                // If user is typing normally in a field AND not scanning, ignore
-                if (isTypingField && !isScanningMode) return;
-
-                // build buffer
-                if (!fast) barcodeBufferRef.current = e.key;
-                else barcodeBufferRef.current += e.key;
-
-                lastKeyTimeRef.current = now;
-
-                // ✅ optionally prevent random inputs getting characters during scan
-                if (isTypingField) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            }
-        };
-
-        // ✅ capture=true so we can block submit before form handles Enter
-        window.addEventListener("keydown", handleKeydown, true);
-        return () => window.removeEventListener("keydown", handleKeydown, true);
-    }, [handleBarcodeScan]);
-
-    // ✅ Auto-focus scanner input
-    useEffect(() => {
-        if (!autoFocusScanner) return;
-        const t = setTimeout(() => barcodeRef.current?.focus(), 200);
-        return () => clearTimeout(t);
-    }, [autoFocusScanner]);
-
-    // ========== PICKUP SALE FUNCTIONS ==========
     const addPickupItem = () => {
-        if (
-            !pickupProductName ||
-            pickupQuantity <= 0 ||
-            pickupUnitPrice <= 0 ||
-            pickupSalePrice <= 0
-        ) {
+        if (!pickupProductId || !pickupSupplierId) {
+            alert("Please select product and supplier");
+            return;
+        }
+
+        if (!pickupVariantId) {
+            alert("Please select variant");
+            return;
+        }
+
+        if (pickupQuantity <= 0 || pickupUnitPrice <= 0 || pickupSalePrice <= 0) {
             alert("Please fill all required fields for pickup item");
             return;
         }
 
+        const variantObj = pickupVariants?.find(v => String(v.id) === String(pickupVariantId));
+
         const newItem = {
             id: Date.now(),
             product_name: pickupProductName,
-            brand: pickupBrand,
-            variant: pickupVariant,
+            product_no: pickupProductNo,
+            pickup_product_id: pickupProductId,
+            pickup_supplier_id: pickupSupplierId,
+            variant_id: pickupVariantId,
+            variant_name: variantObj?.sku || `Variant#${pickupVariantId}`,
             quantity: Number(pickupQuantity),
-            unit: "piece",
-            unit_quantity: Number(pickupQuantity),
             unit_price: Number(pickupUnitPrice),
             sale_price: Number(pickupSalePrice),
             total_price: Number(pickupQuantity) * Number(pickupSalePrice),
@@ -1131,13 +977,13 @@ export default function AddSale({
 
         setPickupItems([...pickupItems, newItem]);
 
-        setPickupProductName("");
-        setPickupBrand("");
-        setPickupVariant("");
+        setPickupSupplierId("");
+        setPickupProductId("");
+        setPickupVariants([]);
+        setPickupVariantId("");
         setPickupQuantity(1);
         setPickupUnitPrice(0);
         setPickupSalePrice(0);
-        setSelectedSupplier(null);
         setShowPickupModal(false);
     };
 
@@ -1145,12 +991,6 @@ export default function AddSale({
         const updated = [...pickupItems];
         updated.splice(index, 1);
         setPickupItems(updated);
-    };
-
-    const handleSupplierSelect = (supplier) => {
-        setSelectedSupplier(supplier);
-        form.setData("supplier_id", supplier.id);
-        setShowSupplierModal(false);
     };
 
     const createNewSupplier = async () => {
@@ -1226,29 +1066,33 @@ export default function AddSale({
             unit: item.unit || "piece",
             unit_price: item.unit_price,
             total_price: item.total_price,
-            shadow_sell_price: item.shadow_sell_price,
         }));
 
         const formattedPickupItems = pickupItems.map((item) => ({
-            product_name: item.product_name,
-            brand: item.brand,
-            variant: item.variant,
+            pickup_product_id: item.pickup_product_id,
+            pickup_supplier_id: item.pickup_supplier_id,
+            variant_id: item.variant_id,
             quantity: item.quantity,
-            unit_quantity: item.unit_quantity || item.quantity,
-            unit: item.unit || "piece",
             unit_price: item.unit_price,
             sale_price: item.sale_price,
             total_price: item.total_price,
         }));
+
+        // Set the appropriate discount rate based on type
+        let discountRateValue = 0;
+        if (discountType === "percentage") {
+            discountRateValue = Number(percentageDiscount) || 0;
+        }
 
         form.setData({
             ...form.data,
             items: formattedItems,
             pickup_items: formattedPickupItems,
             vat_rate: Number(vatRate) || 0,
-            discount_rate: Number(discountRate) || 0,
+            discount_rate: discountRateValue,
+            discount_type: discountType,
+            flat_discount: discountType === "flat_discount" ? (Number(flatDiscount) || 0) : 0,
             paid_amount: Number(paidAmount) || 0,
-            shadow_paid_amount: Number(shadowPaidAmount) || 0,
             grand_amount: grandTotal,
             due_amount: dueAmount,
             sub_amount: totalSubTotal,
@@ -1256,27 +1100,30 @@ export default function AddSale({
             use_partial_payment: usePartialPayment,
             adjust_from_advance: adjustFromAdvance,
             advance_adjustment: advanceAdjustment,
-            supplier_id: selectedSupplier ? selectedSupplier.id : null,
             payment_status: paymentStatus,
             account_id: selectedAccount,
             customer_name: customerNameInput,
             phone: customerPhoneInput,
+            installment_duration: installmentDuration,
+            total_installments: totalInstallments,
         });
     }, [
         selectedItems,
         pickupItems,
         vatRate,
-        discountRate,
+        discountType,
+        flatDiscount,
+        percentageDiscount,
         paidAmount,
-        shadowPaidAmount,
         usePartialPayment,
         adjustFromAdvance,
         availableAdvance,
-        selectedSupplier,
         selectedAccount,
         paymentStatus,
         customerNameInput,
         customerPhoneInput,
+        installmentDuration,
+        totalInstallments,
         calculateRealSubTotal,
         calculatePickupSubTotal,
         calculateTotalSubTotal,
@@ -1305,45 +1152,12 @@ export default function AddSale({
             return;
         }
 
-        // Validate stock in base units
-        const outOfStockItems = selectedItems.filter((item) => {
-            if (item.product_unit_type && item.product_unit_type !== "piece") {
-                const requestedBaseQty = convertToBase(
-                    item.unit_quantity || 1,
-                    item.unit || "piece",
-                    item.product_unit_type
-                );
-                const availableBaseQty =
-                    item.stockDetails?.base_quantity || item.stockBaseQuantity;
-                return requestedBaseQty > availableBaseQty;
-            } else {
-                return item.unit_quantity > item.stockQuantity;
-            }
-        });
-
-        if (outOfStockItems.length > 0) {
-            const itemNames = outOfStockItems
-                .map(
-                    (item) =>
-                        `${item.product_name} (Requested: ${item.unit_quantity} ${item.unit.toUpperCase()})`
-                )
-                .join(", ");
-            alert(`Some items exceed available stock: ${itemNames}`);
-            return;
-        }
-
         if (paidAmount > 0 && !selectedAccount) {
             alert("Please select a payment account");
             return;
         }
 
-        if (pickupItems.length > 0 && !selectedSupplier) {
-            alert("Please select a supplier for pickup items");
-            return;
-        }
-
         form.post(route("sales.store"), {
-            // onSuccess: () => router.visit(route("sales.index")),
             onError: (errors) => {
                 console.error(errors);
                 alert(errors.error || "Failed to create sale. Please check the form data.");
@@ -1375,10 +1189,10 @@ export default function AddSale({
             </PageHeader>
 
             <form onSubmit={submit}>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                    {/* LEFT COLUMN */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* LEFT COLUMN - Customer & Payment */}
                     <div className="lg:col-span-1 space-y-4">
-                        {/* CUSTOMER SELECT */}
+                        {/* Customer Selection */}
                         <div className="form-control">
                             <label className="label">
                                 <span className="label-text">Select Customer *</span>
@@ -1403,7 +1217,6 @@ export default function AddSale({
                                 <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
                                     <User size={16} /> Customer Information
                                 </h3>
-
                                 <div className="space-y-2">
                                     <div className="flex items-center gap-2 text-sm">
                                         <User size={12} className="text-gray-500" />
@@ -1413,7 +1226,6 @@ export default function AddSale({
                                         <Phone size={12} className="text-gray-500" />
                                         <span>{selectedCustomer.phone}</span>
                                     </div>
-
                                     {availableAdvance > 0 && (
                                         <div className="flex items-center gap-2 text-sm">
                                             <span className="font-medium">Available Advance:</span>
@@ -1423,40 +1235,11 @@ export default function AddSale({
                                         </div>
                                     )}
                                 </div>
-
-                                <div className="mt-4 pt-3 border-t border-gray-200">
-                                    <h4 className="font-medium text-gray-700 mb-2">Payment Options</h4>
-
-                                    <div className="space-y-2">
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={usePartialPayment}
-                                                onChange={(e) => setUsePartialPayment(e.target.checked)}
-                                                className="checkbox checkbox-sm checkbox-primary"
-                                            />
-                                            <span className="text-sm">Allow Partial Payment</span>
-                                        </label>
-
-                                        {availableAdvance > 0 && (
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={adjustFromAdvance}
-                                                    onChange={(e) => setAdjustFromAdvance(e.target.checked)}
-                                                    className="checkbox checkbox-sm checkbox-primary"
-                                                />
-                                                <span className="text-sm">Adjust from Customer Advance</span>
-                                            </label>
-                                        )}
-                                    </div>
-                                </div>
                             </div>
                         )}
 
                         {customerSelectValue == "new" && (
                             <>
-                                {/* Name */}
                                 <div className="form-control">
                                     <label className="label">
                                         <span className="label-text">Customer Name *</span>
@@ -1466,11 +1249,8 @@ export default function AddSale({
                                         className="input input-bordered"
                                         value={customerNameInput}
                                         onChange={(e) => handleCustomerNameChange(e.target.value)}
-                                        onFocus={(e) => e.target.select()}
                                     />
                                 </div>
-
-                                {/* Phone */}
                                 <div className="form-control">
                                     <label className="label">
                                         <span className="label-text">Customer Phone *</span>
@@ -1480,40 +1260,26 @@ export default function AddSale({
                                         className="input input-bordered"
                                         value={customerPhoneInput}
                                         onChange={(e) => handleCustomerPhoneChange(e.target.value)}
-                                        onFocus={(e) => e.target.select()}
                                     />
                                 </div>
                             </>
                         )}
 
-                        {/* PAYMENT CARD */}
-                        <div className="card card-compact bg-[#1e4d2b] text-white border border-gray-800 rounded-2xl shadow-lg">
-                            <div className="card-body">
-                                <div className="flex justify-between items-center mb-2">
-                                    <h3 className="card-title text-sm font-black uppercase text-red-500 flex items-center gap-2">
-                                        <CreditCard size={16} /> Payment
-                                    </h3>
+                        {/* Payment Card */}
+                        <div className="card card-compact bg-[#F8FAF5] border border-gray-200 rounded-xl shadow-sm">
+                            <div className="card-body p-4">
+                                <h3 className="text-xs font-black uppercase text-[#1E4D2B] flex items-center gap-2 mb-3">
+                                    <CreditCard size={14} /> Payment
+                                </h3>
 
-                                    <button
-                                        type="button"
-                                        onClick={manualPaymentOverride ? disableManualPaymentOverride : enableManualPaymentOverride}
-                                        className="btn btn-xs bg-red-600 hover:bg-red-700 border-none text-white font-black text-[10px] uppercase"
-                                    >
-                                        {manualPaymentOverride ? <X size={10} /> : <Edit size={10} />}
-                                        {manualPaymentOverride ? "Cancel" : "Manual"}
-                                    </button>
-                                </div>
-
-                                {/* Account Selection */}
                                 <div className="form-control mb-3">
                                     <label className="label py-0">
-                                        <span className="label-text text-[10px] text-gray-400 uppercase font-black tracking-widest">
+                                        <span className="label-text text-[10px] text-gray-500 uppercase font-bold">
                                             Payment Account {paidAmount > 0 && "*"}
                                         </span>
                                     </label>
-
                                     <select
-                                        className="select select-bordered select-sm w-full bg-gray-800 border-gray-700 text-white"
+                                        className="select select-bordered select-sm w-full"
                                         value={selectedAccount}
                                         onChange={(e) => handleAccountSelect(e.target.value)}
                                         required={paidAmount > 0}
@@ -1526,19 +1292,12 @@ export default function AddSale({
                                             </option>
                                         ))}
                                     </select>
-
-                                    {paidAmount > 0 && !selectedAccount && (
-                                        <div className="text-red-400 text-xs mt-1">Please select a payment account</div>
-                                    )}
-
-                                    {/* Selected Account Info */}
                                     {selectedAccountObj && (
-                                        <div className="mt-2 p-2 bg-gray-800 rounded-lg border border-gray-700">
+                                        <div className="mt-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     {getAccountIcon(selectedAccountObj.type)}
                                                     <span className="text-xs font-bold">{selectedAccountObj.name}</span>
-                                                    <span className="text-xs text-gray-400 capitalize">({selectedAccountObj.type})</span>
                                                 </div>
                                                 <div className="text-right">
                                                     <div className="text-[10px] text-gray-400">Balance</div>
@@ -1551,79 +1310,88 @@ export default function AddSale({
                                     )}
                                 </div>
 
-                                {/* Payment status */}
-                                <div className="form-control mb-3">
-                                    <select
-                                        className="select select-bordered select-sm w-full bg-gray-800 border-gray-700 text-white"
-                                        value={paymentStatus}
-                                        onChange={(e) => handlePaymentStatusChange(e.target.value)}
-                                    >
-                                        <option value="unpaid">Unpaid</option>
-                                        <option value="partial">Partial</option>
-                                        <option value="paid">Paid</option>
-                                    </select>
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div className="form-control">
+                                        <label className="label py-0">
+                                            <span className="label-text text-[10px] text-gray-500 uppercase font-bold">
+                                                Status
+                                            </span>
+                                        </label>
+                                        <select
+                                            className="select select-bordered select-sm w-full"
+                                            value={paymentStatus}
+                                            onChange={(e) => handlePaymentStatusChange(e.target.value)}
+                                        >
+                                            <option value="unpaid">Unpaid</option>
+                                            <option value="partial">Partial</option>
+                                            <option value="paid">Paid</option>
+                                            <option value="installment">Installment</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-control">
+                                        <label className="label py-0">
+                                            <span className="label-text text-[10px] text-gray-500 uppercase font-bold">
+                                                Paid Amount
+                                            </span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="input input-bordered input-sm w-full font-mono"
+                                            value={paidAmount}
+                                            onChange={handleManualPaymentInput}
+                                            disabled={!manualPaymentOverride && adjustFromAdvance}
+                                        />
+                                    </div>
                                 </div>
 
-                                {/* Paid amount */}
-                                <div className="form-control mb-3">
-                                    <label className="label py-1">
-                                        <span className="label-text text-[10px] text-gray-400 uppercase font-black tracking-widest">
-                                            Paid Amount
-                                        </span>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        className="input input-bordered input-sm w-full bg-gray-800 border-gray-700 font-mono"
-                                        value={paidAmount}
-                                        onChange={handleManualPaymentInput}
-                                        disabled={!manualPaymentOverride && adjustFromAdvance}
-                                        onFocus={(e) => e.target.select()}
-                                    />
-                                </div>
+                                {paymentStatus === 'installment' && (
+                                    <div className="grid grid-cols-2 gap-3 mb-3">
+                                        <div className="form-control">
+                                            <label className="label py-0">
+                                                <span className="label-text text-[10px] text-gray-500 uppercase font-bold">
+                                                    Total Installments *
+                                                </span>
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                className="input input-bordered input-sm w-full"
+                                                value={totalInstallments}
+                                                onChange={handleTotalInstallmentsInput}
+                                            />
+                                        </div>
+                                        <div className="form-control">
+                                            <label className="label py-0">
+                                                <span className="label-text text-[10px] text-gray-500 uppercase font-bold">
+                                                    Duration (Months) *
+                                                </span>
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                className="input input-bordered input-sm w-full"
+                                                value={installmentDuration}
+                                                onChange={handleInstallmentDurationInput}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
 
-                                {/* Totals */}
-                                <div className="space-y-1 text-xs pt-2 border-t border-gray-800 mt-2 font-bold uppercase tracking-tighter">
+                                <div className="space-y-1 text-xs pt-2 border-t border-gray-200 font-bold">
                                     <div className="flex justify-between">
-                                        <span>Gross:</span>
+                                        <span>Gross</span>
                                         <span>৳{formatCurrency(grandTotal)}</span>
                                     </div>
-                                    <div className="flex justify-between text-red-500 font-black">
-                                        <span>Due:</span>
+                                    <div className="flex justify-between text-[#1E4D2B]">
+                                        <span>Due</span>
                                         <span>৳{formatCurrency(dueAmount)}</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Supplier for pickup */}
-                        {pickupItems.length > 0 && (
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text font-bold">Supplier for Pickup Items *</span>
-                                </label>
-                                <div className="flex items-center gap-2">
-                                    <select
-                                        className="select select-bordered w-full"
-                                        value={selectedSupplier?.id || ""}
-                                        onChange={(e) => {
-                                            const supplier = suppliers.find((s) => s.id == e.target.value);
-                                            if (supplier) handleSupplierSelect(supplier);
-                                        }}
-                                        required
-                                    >
-                                        <option value="">Select Supplier</option>
-                                        {suppliers?.map((s) => (
-                                            <option key={s.id} value={s.id}>
-                                                {s.name} {s.company ? `(${s.company})` : ""}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Sale date */}
+                        {/* Sale Date & Notes */}
                         <div className="form-control">
                             <label className="label">
                                 <span className="label-text">Sale Date *</span>
@@ -1634,11 +1402,8 @@ export default function AddSale({
                                 value={form.data.sale_date}
                                 onChange={(e) => form.setData("sale_date", e.target.value)}
                                 required
-                                onFocus={(e) => e.target.select()}
                             />
                         </div>
-
-                        {/* notes */}
                         <div className="form-control">
                             <label className="label">
                                 <span className="label-text">Notes</span>
@@ -1649,39 +1414,15 @@ export default function AddSale({
                                 value={form.data.notes}
                                 onChange={(e) => form.setData("notes", e.target.value)}
                                 placeholder="Additional notes..."
-                                onFocus={(e) => e.target.select()}
                             />
                         </div>
                     </div>
 
-                    {/* RIGHT COLUMN */}
+                    {/* RIGHT COLUMN - Products */}
                     <div className="lg:col-span-2">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-gray-700">Add Products to Sale</h3>
-                            <div className="text-sm text-gray-500">
-                                Stock Items: {selectedItems.length} | Pickup Items: {pickupItems.length}
-                            </div>
-                        </div>
-
-                        {/* Stock products */}
-                        <div className="mb-6">
-                            <div className="flex justify-between items-center mb-2">
-                                <h4 className="font-bold text-gray-700 flex items-center gap-2">
-                                    <Warehouse size={16} /> Stock Products
-                                </h4>
-                                <button
-                                    type="button"
-                                    className="btn btn-xs btn-outline"
-                                    onClick={() => {
-                                        setProductSearch("");
-                                        setShowProductDropdown(!showProductDropdown);
-                                    }}
-                                >
-                                    <Search size={12} className="mr-1" /> Search Stock
-                                </button>
-                            </div>
-
-                            <div className="form-control mb-4 relative">
+                        {/* Product Search - UPDATED */}
+                        <div className="mb-4">
+                            <div className="form-control relative">
                                 <div className="relative">
                                     <input
                                         ref={barcodeRef}
@@ -1690,18 +1431,30 @@ export default function AddSale({
                                         value={productSearch}
                                         onChange={(e) => {
                                             setProductSearch(e.target.value);
-                                            setShowProductDropdown(true);
                                         }}
-                                        onClick={() => setShowProductDropdown(true)}
-                                        placeholder="Search products by name or SKU..."
-                                        onFocus={(e) => e.target.select()}
+                                        onFocus={() => {
+                                            // When focusing, show dropdown with all products
+                                            setShowProductDropdown(true);
+                                            setFilteredProducts(allProducts);
+                                        }}
+                                        onBlur={() => {
+                                            // Small delay to allow click events on dropdown items
+                                            setTimeout(() => {
+                                                setShowProductDropdown(false);
+                                            }, 200);
+                                        }}
+                                        placeholder="Search products by name or code..."
+                                        autoComplete="off"
                                     />
                                     <Search size={18} className="absolute right-3 top-3.5 text-gray-400" />
-
                                     {productSearch && (
                                         <button
                                             type="button"
-                                            onClick={resetSelectionFlow}
+                                            onClick={() => {
+                                                setProductSearch("");
+                                                setFilteredProducts(allProducts); // Reset to all products when clearing
+                                                setShowProductDropdown(true); // Keep dropdown open
+                                            }}
                                             className="absolute right-10 top-3 text-gray-400 hover:text-error"
                                         >
                                             <X size={16} />
@@ -1709,511 +1462,84 @@ export default function AddSale({
                                     )}
                                 </div>
 
-                                {/* Product dropdown */}
+                                {/* Product Dropdown */}
                                 {showProductDropdown && filteredProducts.length > 0 && (
-                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-box shadow-lg max-h-60 overflow-y-auto">
-                                        <div className="bg-gray-100 p-2 sticky top-0 z-10">
-                                            <div className="flex justify-between items-center">
-                                                <h3 className="text-sm font-semibold text-gray-700">
-                                                    Select Product ({filteredProducts.length})
-                                                </h3>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowProductDropdown(false)}
-                                                    className="btn btn-ghost btn-xs"
-                                                >
-                                                    <X size={12} />
-                                                </button>
-                                            </div>
+                                    <div className="absolute z-10 w-full mt-12 bg-white border border-gray-300 rounded-box shadow-lg max-h-96 overflow-y-auto">
+                                        <div className="bg-gray-100 p-2 sticky top-0 flex justify-between items-center">
+                                            <h3 className="text-sm font-semibold text-gray-700">
+                                                Products ({filteredProducts.length})
+                                            </h3>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowProductDropdown(false)}
+                                                className="btn btn-ghost btn-xs"
+                                            >
+                                                <X size={12} />
+                                            </button>
                                         </div>
 
                                         {filteredProducts.map((product) => (
                                             <div
                                                 key={product.id}
                                                 className="p-3 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
-                                                onMouseDown={(e) => e.preventDefault()}
                                                 onClick={() => handleProductSelect(product)}
                                             >
                                                 <div className="flex justify-between items-center">
-                                                    <div className="flex-1">
-                                                        <div className="font-medium">{product.name}</div>
+                                                    <div>
+                                                        <div className="font-medium flex items-center gap-2">
+                                                            <Package size={14} className="text-primary" />
+                                                            {product.name}
+                                                        </div>
                                                         <div className="text-xs text-gray-500 mt-1">
-                                                            Code: {product.product_no || "N/A"} • Stock: {product.totalStock}{" "}
-                                                            {product.default_unit?.toUpperCase() || "PIECE"} • Variants:{" "}
-                                                            {product.variantsCount}
-                                                            {product.unit_type && product.unit_type !== "piece" && (
-                                                                <span className="ml-2 text-blue-600">
-                                                                    • Purchase Unit: {product.default_unit?.toUpperCase() || "PIECE"}
-                                                                </span>
-                                                            )}
+                                                            <span className="mr-3">Code: {product.product_no || "N/A"}</span>
+                                                            <span>Unit: {product.unit_type?.toUpperCase() || 'PIECE'}</span>
                                                         </div>
                                                     </div>
-                                                    <ChevronRight size={16} className="text-gray-400" />
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs bg-gray-200 px-2 py-1 rounded-full">
+                                                            {product.variants?.size || 0} variants
+                                                        </span>
+                                                        <ChevronRight size={16} className="text-gray-400" />
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
-                                    </div>
-                                )}
-
-                                {/* Brand dropdown */}
-                                {showBrandDropdown && availableBrands.length > 0 && (
-                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-box shadow-lg max-h-60 overflow-y-auto">
-                                        <div className="bg-gray-100 p-2 sticky top-0 z-10">
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={goBackToProducts}
-                                                    className="btn btn-ghost btn-xs"
-                                                >
-                                                    <ArrowLeft size={12} />
-                                                </button>
-                                                <h3 className="text-sm font-semibold text-gray-700 flex-1">
-                                                    Select Brand for {selectedProduct?.name}
-                                                </h3>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowBrandDropdown(false)}
-                                                    className="btn btn-ghost btn-xs"
-                                                >
-                                                    <X size={12} />
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {availableBrands.map((brand, index) => (
-                                            <div
-                                                key={index}
-                                                className="p-3 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
-                                                onMouseDown={(e) => e.preventDefault()}
-                                                onClick={() => handleBrandSelect(brand)}
-                                            >
-                                                <div className="flex justify-between items-center">
-                                                    <div className="flex-1">
-                                                        <div className="font-medium">{brand}</div>
-                                                        <div className="text-xs text-gray-500">Click to view variants</div>
-                                                    </div>
-                                                    <ChevronRight size={16} className="text-gray-400" />
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Variant dropdown */}
-                                {showVariantDropdown && availableVariants.length > 0 && (
-                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-box shadow-lg max-h-60 overflow-y-auto">
-                                        <div className="bg-gray-100 p-2 sticky top-0 z-10">
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={selectedBrand ? goBackToBrands : goBackToProducts}
-                                                    className="btn btn-ghost btn-xs"
-                                                >
-                                                    <ArrowLeft size={12} />
-                                                </button>
-                                                <h3 className="text-sm font-semibold text-gray-700 flex-1">
-                                                    {selectedBrand
-                                                        ? `Select ${selectedBrand} Variant`
-                                                        : `Select Variant for ${selectedProduct?.name}`}
-                                                </h3>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowVariantDropdown(false)}
-                                                    className="btn btn-ghost btn-xs"
-                                                >
-                                                    <X size={12} />
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {availableVariants.map((variantWithStocks) => {
-                                            const {
-                                                variant,
-                                                stocks,
-                                                totalQuantity,
-                                                totalBaseQuantity,
-                                                sale_price,
-                                                shadow_sale_price,
-                                                unit,
-                                                product,
-                                            } = variantWithStocks;
-
-                                            const displayName = selectedBrand
-                                                ? variant.attribute_values?.[selectedBrand] || "Default"
-                                                : Object.values(variant.attribute_values || {})[0] || "Default";
-
-                                            // Get available batches
-                                            const availableStocks = stocks.filter((s) => s.quantity > 0);
-                                            const batchCount = availableStocks.length;
-
-                                            return (
-                                                <div
-                                                    key={variant.id}
-                                                    className="p-3 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
-                                                    onMouseDown={(e) => e.preventDefault()}
-                                                    onClick={() => handleVariantSelect(variantWithStocks)}
-                                                >
-                                                    <div className="flex justify-between items-center">
-                                                        <div className="flex-1">
-                                                            <div className="font-medium">{displayName}</div>
-                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                <div>Purchase Unit: {unit?.toUpperCase()}</div>
-                                                                <div>
-                                                                    Total Available: {totalQuantity} {unit?.toUpperCase()} (
-                                                                    {totalBaseQuantity.toFixed(3)} base units)
-                                                                </div>
-                                                                <div className="flex items-center gap-1">
-                                                                    <Warehouse size={10} />
-                                                                    Batches: {batchCount}
-                                                                    {batchCount > 1 && (
-                                                                        <span className="text-blue-600 ml-1">
-                                                                            (Click to select batch)
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                {/* Show batch details if only one batch */}
-                                                                {batchCount === 1 && availableStocks[0].batch_no && (
-                                                                    <div className="mt-1">
-                                                                        <span className="text-blue-600">Batch: {availableStocks[0].batch_no}</span>
-                                                                    </div>
-                                                                )}
-                                                                <div>
-                                                                    Price: {formatWithSymbol(Number(sale_price) || 0)} per{" "}
-                                                                    {unit?.toUpperCase()}
-                                                                </div>
-                                                                {Number(shadow_sale_price) > 0 && (
-                                                                    <div>Shadow Price: {formatWithSymbol(Number(shadow_sale_price))}</div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <Plus size={16} className="text-primary" />
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
                                     </div>
                                 )}
                             </div>
-
-                            {/* Stock Items List */}
-                            {selectedItems.length > 0 ? (
-                                <div className="space-y-3">
-                                    <h3 className="font-semibold">Stock Items ({selectedItems.length})</h3>
-
-                                    {selectedItems.map((item, index) => {
-                                        const itemKey = item.uniqueKey || index;
-                                        const availableUnitsList = availableUnits[item.uniqueKey] || [item.unit || "piece"];
-                                        const selectedUnit = selectedUnits[item.uniqueKey] || item.unit || "piece";
-                                        const unitQuantity = unitQuantities[item.uniqueKey] || item.unit_quantity || 1;
-
-                                        return (
-                                            <div key={itemKey} className="border border-gray-300 rounded-box p-4">
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <div className="flex-1">
-                                                        <h4 className="font-medium">
-                                                            {item.product_name} ({item.product_code})
-                                                        </h4>
-                                                        <p className="text-sm text-gray-600">
-                                                            <strong>Variant:</strong> {item.variant_attribute}: {item.variant_value}
-                                                        </p>
-                                                        <p className="text-sm text-gray-600">
-                                                            <strong>Batch No:</strong> {item?.batch_no} • <strong>SKU:</strong>{" "}
-                                                            {item?.sku}
-                                                        </p>
-                                                        <p className="text-sm text-gray-600">
-                                                            <strong>Purchase Unit:</strong>{" "}
-                                                            {item.original_purchase_unit?.toUpperCase()} • <strong>Available in this batch:</strong>{" "}
-                                                            {item.stockQuantity} {item.original_purchase_unit?.toUpperCase()}
-                                                            {item.product_unit_type && item.product_unit_type !== "piece" && (
-                                                                <span>
-                                                                    {" "}
-                                                                    ({item.stockBaseQuantity.toFixed(3)} base units)
-                                                                </span>
-                                                            )}
-                                                        </p>
-                                                        {/* Show warehouse info if available */}
-                                                        {item.stockDetails?.warehouse && (
-                                                            <p className="text-sm text-gray-600">
-                                                                <strong>Warehouse:</strong> {item.stockDetails.warehouse.name}
-                                                            </p>
-                                                        )}
-                                                    </div>
-
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeItem(index)}
-                                                        className="btn btn-xs btn-error"
-                                                    >
-                                                        <Trash2 size={12} />
-                                                    </button>
-                                                </div>
-
-                                                {/* Unit settings section */}
-                                                <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <Ruler size={14} className="text-blue-600" />
-                                                        <span className="text-sm font-bold text-gray-700">Sale Unit Settings</span>
-                                                        <div className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                                            <Calculator size={10} className="inline mr-1" />
-                                                            Auto Price Calculation
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                                                        {/* ইউনিট সিলেক্ট */}
-                                                        <div className="form-control">
-                                                            <label className="label">
-                                                                <span className="label-text">
-                                                                    Sale Unit *
-                                                                </span>
-                                                            </label>
-                                                            <select
-                                                                className="select select-bordered select-sm"
-                                                                value={
-                                                                    selectedUnit
-                                                                }
-                                                                onChange={(e) =>
-                                                                    handleUnitChange(
-                                                                        item.uniqueKey,
-                                                                        e.target
-                                                                            .value
-                                                                    )
-                                                                }
-                                                            >
-                                                                {availableUnitsList.map(
-                                                                    (unit) => (
-                                                                        <option
-                                                                            key={
-                                                                                unit
-                                                                            }
-                                                                            value={
-                                                                                unit
-                                                                            }
-                                                                        >
-                                                                            {unit.toUpperCase()}
-                                                                        </option>
-                                                                    )
-                                                                )}
-                                                            </select>
-                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                Purchase Unit:{" "}
-                                                                {item.original_purchase_unit?.toUpperCase()}
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Quantity Input */}
-                                                        <div className="form-control">
-                                                            <label className="label">
-                                                                <span className="label-text">
-                                                                    Quantity *
-                                                                </span>
-                                                            </label>
-                                                            <input
-                                                                type="number"
-                                                                className="input input-bordered input-sm"
-                                                                value={
-                                                                    unitQuantity
-                                                                }
-                                                                onChange={(e) =>
-                                                                    updateItem(
-                                                                        index,
-                                                                        "unit_quantity",
-                                                                        e.target
-                                                                            .value
-                                                                    )
-                                                                }
-                                                                required
-                                                                onFocus={(e) => e.target.select()}
-                                                            />
-                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                In{" "}
-                                                                {selectedUnit.toUpperCase()}
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Unit Price - READ ONLY & AUTO-CALCULATED */}
-                                                        <div className="form-control">
-                                                            <label className="label">
-                                                                <span className="label-text">
-                                                                    Unit Price
-                                                                    (৳) *
-                                                                </span>
-                                                            </label>
-                                                            <div className="relative">
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    className="input input-bordered input-sm bg-gray-100 w-full pr-10"
-                                                                    value={formatCurrency(
-                                                                        item.unit_price
-                                                                    )}
-                                                                    readOnly
-                                                                    onFocus={(e) => e.target.select()}
-                                                                />
-                                                                <div className="absolute right-3 top-2.5 text-gray-500">
-                                                                    <Calculator
-                                                                        size={
-                                                                            14
-                                                                        }
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                Per{" "}
-                                                                {selectedUnit.toUpperCase()}{" "}
-                                                                (auto)
-                                                            </div>
-                                                            {item.product_unit_type &&
-                                                                item.product_unit_type !==
-                                                                "piece" && (
-                                                                    <div className="text-xs text-blue-600 mt-1">
-                                                                        Base: ৳
-                                                                        {formatCurrency(
-                                                                            item.base_price_per_base_unit ||
-                                                                            item.unit_price
-                                                                        )}{" "}
-                                                                        per base
-                                                                        unit
-                                                                    </div>
-                                                                )}
-                                                        </div>
-
-                                                        {/* Total Price */}
-                                                        <div className="form-control">
-                                                            <label className="label">
-                                                                <span className="label-text">
-                                                                    Total Price
-                                                                    (৳)
-                                                                </span>
-                                                            </label>
-                                                            <input
-                                                                type="number"
-                                                                className="input input-bordered input-sm bg-gray-100"
-                                                                value={formatCurrency(
-                                                                    item.total_price
-                                                                )}
-                                                                readOnly
-                                                                onFocus={(e) => e.target.select()}
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    {/* ইউনিট কনভার্সন ইনফো */}
-                                                    {item.product_unit_type &&
-                                                        item.product_unit_type !==
-                                                        "piece" && (
-                                                            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
-                                                                <div className="text-xs text-blue-800">
-                                                                    <div className="font-bold mb-1 flex items-center gap-1">
-                                                                        <Calculator
-                                                                            size={
-                                                                                10
-                                                                            }
-                                                                        />
-                                                                        Unit
-                                                                        Conversion
-                                                                        & Price
-                                                                        Calculation:
-                                                                    </div>
-                                                                    <div className="grid grid-cols-2 gap-2">
-                                                                        <div>
-                                                                            <span className="font-medium">
-                                                                                Purchase
-                                                                                Unit:
-                                                                            </span>{" "}
-                                                                            {item.original_purchase_unit?.toUpperCase()}
-                                                                        </div>
-                                                                        <div>
-                                                                            <span className="font-medium">
-                                                                                Sale
-                                                                                Unit:
-                                                                            </span>{" "}
-                                                                            {selectedUnit.toUpperCase()}
-                                                                        </div>
-                                                                        <div>
-                                                                            <span className="font-medium">
-                                                                                Base
-                                                                                Unit
-                                                                                Price:
-                                                                            </span>{" "}
-                                                                            ৳
-                                                                            {formatCurrency(
-                                                                                item.base_price_per_base_unit ||
-                                                                                item.unit_price
-                                                                            )}
-                                                                        </div>
-                                                                        <div>
-                                                                            <span className="font-medium">
-                                                                                Calculated
-                                                                                Price:
-                                                                            </span>{" "}
-                                                                            ৳
-                                                                            {formatCurrency(
-                                                                                item.unit_price
-                                                                            )}
-                                                                            /
-                                                                            {selectedUnit.toUpperCase()}
-                                                                        </div>
-                                                                        <div>
-                                                                            <span className="font-medium">
-                                                                                Quantity:
-                                                                            </span>{" "}
-                                                                            {
-                                                                                unitQuantity
-                                                                            }{" "}
-                                                                            {selectedUnit.toUpperCase()}
-                                                                        </div>
-                                                                        <div>
-                                                                            <span className="font-medium">
-                                                                                In
-                                                                                Base
-                                                                                Units:
-                                                                            </span>{" "}
-                                                                            {convertToBase(
-                                                                                unitQuantity,
-                                                                                selectedUnit,
-                                                                                item.product_unit_type
-                                                                            ).toFixed(
-                                                                                3
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="col-span-2">
-                                                                            <span className="font-medium">
-                                                                                Available
-                                                                                Stock:
-                                                                            </span>{" "}
-                                                                            {convertFromBase(
-                                                                                item.stockBaseQuantity,
-                                                                                selectedUnit,
-                                                                                item.product_unit_type
-                                                                            ).toFixed(
-                                                                                3
-                                                                            )}{" "}
-                                                                            {selectedUnit.toUpperCase()}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-box">
-                                    <p className="text-gray-500">
-                                        No stock items added yet
-                                    </p>
-                                    <p className="text-sm text-gray-400 mt-1">
-                                        Search and add stock products above
-                                    </p>
-                                </div>
-                            )}
                         </div>
 
-                        {/* Pickup section */}
-                        <div>
+                        {/* Selected Items List */}
+                        {selectedItems.length > 0 && (
+                            <div className="mb-4">
+                                <h3 className="font-semibold mb-2 flex items-center gap-2">
+                                    <ShoppingBag size={16} className="text-primary" />
+                                    Selected Items ({selectedItems.length})
+                                </h3>
+                                <div className="space-y-3">
+                                    {selectedItems.map((item, index) => (
+                                        <SelectedItemCard
+                                            key={item.uniqueKey}
+                                            item={item}
+                                            index={index}
+                                            selectedUnits={selectedUnits}
+                                            unitQuantities={unitQuantities}
+                                            availableUnits={availableUnits}
+                                            priceManuallyEdited={priceManuallyEdited}
+                                            onUpdateItem={updateItem}
+                                            onRemoveItem={removeItem}
+                                            onUnitChange={handleUnitChange}
+                                            formatCurrency={formatCurrency}
+                                            convertToBase={convertToBase}
+                                            convertFromBase={convertFromBase}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Pickup Section */}
+                        <div className="mt-6">
                             <div className="flex justify-between items-center mb-2">
                                 <h4 className="font-bold text-gray-700 flex items-center gap-2">
                                     <ShoppingBag size={16} /> Pickup Products
@@ -2223,91 +1549,29 @@ export default function AddSale({
                                     onClick={() => setShowPickupModal(true)}
                                     className="btn btn-sm btn-outline"
                                 >
-                                    <Plus size={14} className="mr-1" /> Add
-                                    Pickup Item
+                                    <Plus size={14} className="mr-1" /> Add Pickup Item
                                 </button>
                             </div>
 
                             {pickupItems.length > 0 ? (
                                 <div className="space-y-3">
                                     {pickupItems.map((item, index) => (
-                                        <div
-                                            key={item.id}
-                                            className="card bg-gray-50 border border-gray-200 rounded-lg"
-                                        >
+                                        <div key={item.id} className="card bg-gray-50 border border-gray-200 rounded-lg">
                                             <div className="card-body p-3">
                                                 <div className="flex justify-between items-start">
-                                                    <div className="flex-1">
-                                                        <h4 className="font-bold text-gray-900">
-                                                            {item.product_name}
-                                                        </h4>
-                                                        <div className="text-sm text-gray-600 mt-1">
-                                                            <div className="text-xs">
-                                                                <strong>
-                                                                    Brand:
-                                                                </strong>{" "}
-                                                                {item.brand ||
-                                                                    "N/A"}{" "}
-                                                                •{" "}
-                                                                <strong>
-                                                                    Variant:
-                                                                </strong>{" "}
-                                                                {item.variant ||
-                                                                    "N/A"}
-                                                            </div>
-                                                            <div className="grid grid-cols-4 gap-2 mt-2">
-                                                                <div>
-                                                                    <span className="text-xs text-gray-500">
-                                                                        Qty:
-                                                                    </span>
-                                                                    <div className="font-bold">
-                                                                        {
-                                                                            item.quantity
-                                                                        }{" "}
-                                                                        {item.unit?.toUpperCase() ||
-                                                                            "PIECE"}
-                                                                    </div>
-                                                                </div>
-                                                                <div>
-                                                                    <span className="text-xs text-gray-500">
-                                                                        Cost:
-                                                                    </span>
-                                                                    <div className="font-bold">
-                                                                        {formatWithSymbol(
-                                                                            item.unit_price
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                                <div>
-                                                                    <span className="text-xs text-gray-500">
-                                                                        Sale:
-                                                                    </span>
-                                                                    <div className="font-bold">
-                                                                        {formatWithSymbol(
-                                                                            item.sale_price
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                                <div>
-                                                                    <span className="text-xs text-gray-500">
-                                                                        Total:
-                                                                    </span>
-                                                                    <div className="font-bold text-red-600">
-                                                                        {formatWithSymbol(
-                                                                            item.total_price
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
+                                                    <div>
+                                                        <h4 className="font-bold">{item.product_name}</h4>
+                                                        <div className="text-sm mt-1">
+                                                            <span className="text-gray-600">Variant: {item.variant_name}</span>
+                                                            <br />
+                                                            <span className="text-gray-600">Qty: {item.quantity} | Price: {formatWithSymbol(item.sale_price)}</span>
+                                                            <br />
+                                                            <span className="font-bold">Total: {formatWithSymbol(item.total_price)}</span>
                                                         </div>
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        onClick={() =>
-                                                            removePickupItem(
-                                                                index
-                                                            )
-                                                        }
+                                                        onClick={() => removePickupItem(index)}
                                                         className="btn btn-xs btn-ghost text-red-600"
                                                     >
                                                         <Trash2 size={14} />
@@ -2319,477 +1583,361 @@ export default function AddSale({
                                 </div>
                             ) : (
                                 <div className="border border-dashed border-gray-200 rounded-box py-8 text-center">
-                                    <ShoppingBag
-                                        size={32}
-                                        className="mx-auto text-gray-300 mb-2"
-                                    />
-                                    <p className="text-gray-500">
-                                        No pickup items added
-                                    </p>
-                                    <p className="text-sm text-gray-400 mt-1">
-                                        Click "Add Pickup Item" to add products
-                                        not in stock
-                                    </p>
+                                    <ShoppingBag size={32} className="mx-auto text-gray-300 mb-2" />
+                                    <p className="text-gray-500">No pickup items added</p>
                                 </div>
                             )}
                         </div>
 
                         {/* Summary */}
-                        {(selectedItems.length > 0 ||
-                            pickupItems.length > 0) && (
-                                <div className="border-t pt-4 mt-4 space-y-3">
-                                    <div className="flex justify-between items-center">
-                                        <span>Stock Items Total:</span>
-                                        <span>
-                                            {formatWithSymbol(realSubTotal)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span>Pickup Items Total:</span>
-                                        <span>
-                                            {formatWithSymbol(pickupSubTotal)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span>Sub Total:</span>
-                                        <span>
-                                            {formatWithSymbol(totalSubTotal)}
-                                        </span>
-                                    </div>
-
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <span>Vat / Tax:</span>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                max="100"
-                                                step="0.01"
-                                                className="input input-bordered input-sm w-20"
-                                                value={vatRate}
-                                                onChange={(e) =>
-                                                    setVatRate(
-                                                        parseFloat(
-                                                            e.target.value
-                                                        ) || 0
-                                                    )
-                                                }
-                                                onFocus={(e) => e.target.select()}
-                                            />
-                                            <span>%</span>
-                                        </div>
-                                        <span>{formatWithSymbol(vatAmount)}</span>
-                                    </div>
-
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <span>Discount:</span>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                max="100"
-                                                step="0.01"
-                                                className="input input-bordered input-sm w-20"
-                                                value={discountRate}
-                                                onChange={(e) =>
-                                                    setDiscountRate(
-                                                        parseFloat(
-                                                            e.target.value
-                                                        ) || 0
-                                                    )
-                                                }
-                                                onFocus={(e) => e.target.select()}
-                                            />
-                                            <span>%</span>
-                                        </div>
-                                        <span>
-                                            {formatWithSymbol(discountAmount)}
-                                        </span>
-                                    </div>
-
-                                    <div className="flex justify-between items-center text-lg font-bold border-t pt-2">
-                                        <span>Grand Total:</span>
-                                        <span>{formatWithSymbol(grandTotal)}</span>
-                                    </div>
-
-                                    <div className="flex justify-between items-center text-lg font-bold border-t pt-2">
-                                        <span>Due Amount:</span>
-                                        <span
-                                            className={
-                                                dueAmount > 0
-                                                    ? "text-error"
-                                                    : "text-success"
-                                            }
-                                        >
-                                            {formatWithSymbol(dueAmount)}
-                                        </span>
-                                    </div>
+                        {(selectedItems.length > 0 || pickupItems.length > 0) && (
+                            <div className="border-t pt-4 mt-4 space-y-2">
+                                <div className="flex justify-between">
+                                    <span>Stock Items:</span>
+                                    <span>{formatWithSymbol(realSubTotal)}</span>
                                 </div>
-                            )}
+                                <div className="flex justify-between">
+                                    <span>Pickup Items:</span>
+                                    <span>{formatWithSymbol(pickupSubTotal)}</span>
+                                </div>
+                                <div className="flex justify-between font-bold">
+                                    <span>Sub Total:</span>
+                                    <span>{formatWithSymbol(totalSubTotal)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        <span>VAT:</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            step="0.01"
+                                            className="input input-bordered input-sm w-20"
+                                            value={vatRate}
+                                            onChange={(e) => setVatRate(parseFloat(e.target.value) || 0)}
+                                        />
+                                        <span>%</span>
+                                    </div>
+                                    <span>{formatWithSymbol(vatAmount)}</span>
+                                </div>
+
+                                {/* Discount Section */}
+                                <div className="flex justify-between items-center border-t pt-2 mt-2">
+                                    <div className="flex items-center gap-2">
+                                        <span>Discount:</span>
+                                        <select
+                                            className="select select-bordered select-sm w-24"
+                                            value={discountType}
+                                            onChange={(e) => setDiscountType(e.target.value)}
+                                        >
+                                            <option value="percentage">Percentage</option>
+                                            <option value="flat_discount">Flat</option>
+                                        </select>
+                                    </div>
+                                    <span className="text-green-600">-{formatWithSymbol(discountAmount)}</span>
+                                </div>
+
+                                {/* Conditional Discount Input Fields */}
+                                {discountType === "percentage" && (
+                                    <div className="flex justify-between items-center">
+                                        <div className="flex items-center gap-2">
+                                            <span>Percentage:</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                step="0.01"
+                                                className="input input-bordered input-sm w-20"
+                                                value={percentageDiscount}
+                                                onChange={(e) => setPercentageDiscount(parseFloat(e.target.value) || 0)}
+                                            />
+                                            <span>%</span>
+                                        </div>
+                                        <span className="text-sm text-gray-600">
+                                            Discount: {formatWithSymbol(discountAmount)}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {discountType === "flat_discount" && (
+                                    <div className="flex justify-between items-center">
+                                        <div className="flex items-center gap-2">
+                                            <span>Flat Discount:</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                className="input input-bordered input-sm w-28"
+                                                value={flatDiscount}
+                                                onChange={(e) => setFlatDiscount(parseFloat(e.target.value) || 0)}
+                                                placeholder="Enter amount"
+                                            />
+                                        </div>
+                                        <span className="text-sm text-gray-600">
+                                            ৳{formatCurrency(flatDiscount)} off
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-between text-lg font-bold border-t pt-2">
+                                    <span>Grand Total:</span>
+                                    <span>{formatWithSymbol(grandTotal)}</span>
+                                </div>
+                                <div className="flex justify-between text-lg font-bold">
+                                    <span>Due:</span>
+                                    <span className={dueAmount > 0 ? "text-error" : "text-success"}>
+                                        {formatWithSymbol(dueAmount)}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Submit Buttons */}
+                        <div className="flex gap-3 mt-6">
+                            <button
+                                type="submit"
+                                className="btn bg-[#1e4d2b] text-white"
+                                disabled={form.processing}
+                            >
+                                {form.processing ? "Creating..." : "Create Sale"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => router.visit(route("sales.index"))}
+                                className="btn btn-ghost"
+                            >
+                                Cancel
+                            </button>
+                        </div>
                     </div>
-                </div>
-
-                <div className="flex gap-3 mt-6">
-                    <button
-                        type="submit"
-                        className="btn bg-[#1e4d2b] text-white"
-                        disabled={form.processing}
-                    >
-                        {form.processing ? "Creating Sale..." : "Create Sale"}
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => router.visit(route("sales.index"))}
-                        className="btn btn-ghost"
-                    >
-                        Cancel
-                    </button>
                 </div>
             </form>
 
-            {/* Pickup Modal */}
-            {showPickupModal && (
+            {/* Variant Selection Modal */}
+            {showVariantModal && selectedProduct && (
                 <div className="modal modal-open">
-                    <div className="modal-box max-w-2xl">
+                    <div className="modal-box max-w-3xl">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold">
-                                Add Pickup Item
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <Layers size={18} className="text-primary" />
+                                Select Variant - {selectedProduct.name}
                             </h3>
-                            <button
-                                onClick={() => setShowPickupModal(false)}
+                            <button 
+                                onClick={() => {
+                                    setShowVariantModal(false);
+                                    setSelectedProduct(null);
+                                }} 
                                 className="btn btn-sm btn-circle btn-ghost"
                             >
                                 ✕
                             </button>
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">
-                                        Product Name *
-                                    </span>
-                                </label>
-                                <input
-                                    type="text"
-                                    className="input input-bordered"
-                                    value={pickupProductName}
-                                    onChange={(e) =>
-                                        setPickupProductName(e.target.value)
-                                    }
-                                    placeholder="Enter product name"
-                                    onFocus={(e) => e.target.select()}
-                                />
-                            </div>
+                        <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
+                            {productVariants.map((variant, index) => (
+                                <div
+                                    key={variant.id}
+                                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                                    onClick={() => handleVariantSelect(variant)}
+                                >
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                            {/* Attributes */}
+                                            <div className="flex flex-wrap gap-2 mb-2">
+                                                {variant.attributes.map((attr, idx) => (
+                                                    <span
+                                                        key={idx}
+                                                        className="px-2 py-1 bg-blue-50 text-blue-700 rounded-md text-xs border border-blue-200"
+                                                    >
+                                                        <span className="font-semibold">{attr.key}:</span> {attr.value}
+                                                    </span>
+                                                ))}
+                                            </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">
-                                            Brand
-                                        </span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        className="input input-bordered"
-                                        value={pickupBrand}
-                                        onChange={(e) =>
-                                            setPickupBrand(e.target.value)
-                                        }
-                                        placeholder="Enter brand"
-                                        onFocus={(e) => e.target.select()}
-                                    />
+                                            {/* Batches Preview */}
+                                            {variant.batches.length > 0 && (
+                                                <div className="mt-2">
+                                                    <div className="text-xs font-semibold text-gray-600 mb-1">Available Batches:</div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {variant.batches.slice(0, 3).map((batch, idx) => (
+                                                            <span
+                                                                key={idx}
+                                                                className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs"
+                                                            >
+                                                                Batch: {batch.batch_no || 'N/A'} | Qty: {batch.totalQuantity} | Price: ৳{batch.sale_price}
+                                                            </span>
+                                                        ))}
+                                                        {variant.batches.length > 3 && (
+                                                            <span className="text-xs text-gray-500">
+                                                                +{variant.batches.length - 3} more
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <ChevronRight size={20} className="text-gray-400" />
+                                    </div>
                                 </div>
-
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">
-                                            Variant
-                                        </span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        className="input input-bordered"
-                                        value={pickupVariant}
-                                        onChange={(e) =>
-                                            setPickupVariant(e.target.value)
-                                        }
-                                        placeholder="Enter variant"
-                                        onFocus={(e) => e.target.select()}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">
-                                            Quantity *
-                                        </span>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        className="input input-bordered"
-                                        value={pickupQuantity}
-                                        onChange={(e) =>
-                                            setPickupQuantity(e.target.value)
-                                        }
-                                        min="1"
-                                        onFocus={(e) => e.target.select()}
-                                    />
-                                </div>
-
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">
-                                            Cost Price *
-                                        </span>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        className="input input-bordered"
-                                        value={pickupUnitPrice}
-                                        onChange={(e) =>
-                                            setPickupUnitPrice(e.target.value)
-                                        }
-                                        min="0"
-                                        step="0.01"
-                                        onFocus={(e) => e.target.select()}
-                                    />
-                                </div>
-
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">
-                                            Sale Price *
-                                        </span>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        className="input input-bordered"
-                                        value={pickupSalePrice}
-                                        onChange={(e) =>
-                                            setPickupSalePrice(e.target.value)
-                                        }
-                                        min="0"
-                                        step="0.01"
-                                        onFocus={(e) => e.target.select()}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="modal-action">
-                            <button
-                                onClick={() => setShowPickupModal(false)}
-                                className="btn btn-ghost"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={addPickupItem}
-                                className="btn bg-[#1e4d2b] text-white"
-                            >
-                                Add Item
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Supplier Modal */}
-            {showSupplierModal && (
-                <div className="modal modal-open">
-                    <div className="modal-box max-w-lg">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold">
-                                Add New Supplier
-                            </h3>
-                            <button
-                                onClick={() => setShowSupplierModal(false)}
-                                className="btn btn-sm btn-circle btn-ghost"
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">
-                                        Supplier Name *
-                                    </span>
-                                </label>
-                                <input
-                                    type="text"
-                                    className="input input-bordered"
-                                    value={newSupplierName}
-                                    onChange={(e) =>
-                                        setNewSupplierName(e.target.value)
-                                    }
-                                    placeholder="Enter supplier name"
-                                    onFocus={(e) => e.target.select()}
-                                />
-                            </div>
-
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">Company</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    className="input input-bordered"
-                                    value={newSupplierCompany}
-                                    onChange={(e) =>
-                                        setNewSupplierCompany(e.target.value)
-                                    }
-                                    placeholder="Enter company name"
-                                    onFocus={(e) => e.target.select()}
-                                />
-                            </div>
-
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">Phone *</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    className="input input-bordered"
-                                    value={newSupplierPhone}
-                                    onChange={(e) =>
-                                        setNewSupplierPhone(e.target.value)
-                                    }
-                                    placeholder="Enter phone number"
-                                    onFocus={(e) => e.target.select()}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="modal-action">
-                            <button
-                                onClick={() => setShowSupplierModal(false)}
-                                className="btn btn-ghost"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={createNewSupplier}
-                                className="btn bg-[#1e4d2b] text-white"
-                            >
-                                Create Supplier
-                            </button>
+                            ))}
                         </div>
                     </div>
                 </div>
             )}
 
             {/* Batch Selection Modal */}
-            {showBatchModal && selectedVariantForBatch && (
+            {showBatchModal && selectedVariant && (
                 <div className="modal modal-open">
                     <div className="modal-box max-w-2xl">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold">
-                                Select Batch for {selectedVariantForBatch.product?.name} - {
-                                    Object.values(selectedVariantForBatch.variant?.attribute_values || {})[0] || "Default"
-                                }
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <Box size={18} className="text-primary" />
+                                Select Batch - {selectedProduct?.name}
                             </h3>
-                            <button
+                            <button 
                                 onClick={() => {
                                     setShowBatchModal(false);
-                                    setAvailableBatches([]);
-                                    setSelectedVariantForBatch(null);
-                                }}
+                                    setSelectedVariant(null);
+                                }} 
                                 className="btn btn-sm btn-circle btn-ghost"
                             >
                                 ✕
                             </button>
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="bg-gray-50 p-4 rounded-lg">
-                                <h4 className="font-semibold mb-2">Available Batches</h4>
-                                <p className="text-sm text-gray-600 mb-3">
-                                    Select a batch to add to sale. Different batches may have different prices.
-                                </p>
-                            </div>
-
-                            <div className="overflow-y-auto max-h-96">
-                                {availableBatches.map((stock, index) => (
-                                    <div
-                                        key={stock.id || index}
-                                        className="p-4 border border-gray-200 rounded-lg mb-3 hover:bg-gray-50 cursor-pointer"
-                                        onClick={() => handleBatchSelect(stock)}
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex-1">
-                                                <div className="font-medium flex items-center gap-2">
-                                                    <Warehouse size={14} className="text-blue-600" />
-                                                    Batch: {stock.batch_no || "No Batch No"}
-                                                </div>
-                                                <div className="text-sm text-gray-600 mt-2 grid grid-cols-2 gap-2">
-                                                    <div>
-                                                        <span className="font-medium">Available:</span> {stock.quantity} {stock.unit?.toUpperCase()}
-                                                        {stock.base_quantity && (
-                                                            <span className="ml-1 text-gray-500">
-                                                                ({Number(stock.base_quantity).toFixed(3)} base units)
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div>
-                                                        <span className="font-medium">Purchase Price:</span> {formatWithSymbol(stock.purchase_price || 0)}
-                                                    </div>
-                                                    <div>
-                                                        <span className="font-medium">Sale Price:</span> {formatWithSymbol(stock.sale_price || 0)}
-                                                    </div>
-                                                    {stock.shadow_sale_price > 0 && (
-                                                        <div>
-                                                            <span className="font-medium">Shadow Price:</span> {formatWithSymbol(stock.shadow_sale_price || 0)}
-                                                        </div>
-                                                    )}
-                                                    <div>
-                                                        <span className="font-medium">Warehouse:</span> {stock.warehouse?.name || "Main"}
-                                                    </div>
-                                                    {stock.expiry_date && (
-                                                        <div>
-                                                            <span className="font-medium">Expiry:</span> {stock.expiry_date}
-                                                        </div>
-                                                    )}
-                                                </div>
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                            {availableBatches.map((batch, index) => (
+                                <div
+                                    key={index}
+                                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                                    onClick={() => handleBatchSelect(batch)}
+                                >
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <div className="text-sm">
+                                                <span className="font-semibold">Batch No:</span> {batch.batch_no || 'N/A'}
                                             </div>
-                                            <div className="ml-4">
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-sm btn-primary"
-                                                    onClick={() => handleBatchSelect(stock)}
-                                                >
-                                                    Select
-                                                </button>
+                                            <div className="text-sm mt-1">
+                                                <span className="font-semibold">Available Stock:</span> {batch.totalQuantity} {selectedVariant.unit.toUpperCase()}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-sm">
+                                                <span className="font-semibold">Sale Price:</span> ৳{batch.sale_price || 0}
+                                            </div>
+                                            <div className="text-sm mt-1">
+                                                <span className="font-semibold">Purchase Price:</span> ৳{batch.purchase_price || 0}
                                             </div>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
-
-                            {availableBatches.length === 0 && (
-                                <div className="text-center py-8">
-                                    <AlertCircle size={32} className="mx-auto text-gray-400 mb-2" />
-                                    <p className="text-gray-500">No available batches found</p>
+                                    <div className="mt-2 text-right">
+                                        <button className="btn btn-sm btn-primary">
+                                            Select This Batch
+                                        </button>
+                                    </div>
                                 </div>
-                            )}
+                            ))}
                         </div>
+                    </div>
+                </div>
+            )}
 
+            {/* Pickup Modal */}
+            {showPickupModal && (
+                <div className="modal modal-open">
+                    <div className="modal-box max-w-2xl">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold">Add Pickup Item</h3>
+                            <button onClick={() => setShowPickupModal(false)} className="btn btn-sm btn-circle btn-ghost">✕</button>
+                        </div>
+                        <div className="space-y-4">
+                            <div className="form-control">
+                                <label className="label">Pickup Product *</label>
+                                <select
+                                    value={pickupProductId}
+                                    onChange={(e) => handlePickupProductChange(e.target.value)}
+                                    className="select select-bordered"
+                                >
+                                    <option value="">Select Product</option>
+                                    {products.map((product) => (
+                                        <option key={product.id} value={product.id}>
+                                            {product.name} ({product.product_no})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="form-control">
+                                <label className="label">Pickup Variant *</label>
+                                <select
+                                    value={pickupVariantId}
+                                    onChange={(e) => setPickupVariantId(e.target.value)}
+                                    className="select select-bordered"
+                                    disabled={!pickupProductId || pickupVariants.length === 0}
+                                >
+                                    <option value="">
+                                        {pickupProductId ? "Select Variant" : "Select Product First"}
+                                    </option>
+                                    {pickupVariants?.map((v) => (
+                                        <option key={v.id} value={v.id}>
+                                            {v.sku || `Variant #${v.id}`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="form-control">
+                                <label className="label">Pickup Supplier *</label>
+                                <select
+                                    value={pickupSupplierId}
+                                    onChange={(e) => setPickupSupplierId(e.target.value)}
+                                    className="select select-bordered"
+                                >
+                                    <option value="">Select Supplier</option>
+                                    {suppliers.map((supplier) => (
+                                        <option key={supplier.id} value={supplier.id}>
+                                            {supplier.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="form-control">
+                                    <label className="label">Quantity *</label>
+                                    <input
+                                        type="number"
+                                        className="input input-bordered"
+                                        value={pickupQuantity}
+                                        onChange={(e) => setPickupQuantity(e.target.value)}
+                                        min="1"
+                                    />
+                                </div>
+                                <div className="form-control">
+                                    <label className="label">Cost Price *</label>
+                                    <input
+                                        type="number"
+                                        className="input input-bordered"
+                                        value={pickupUnitPrice}
+                                        onChange={(e) => setPickupUnitPrice(e.target.value)}
+                                        min="0"
+                                        step="0.01"
+                                    />
+                                </div>
+                                <div className="form-control">
+                                    <label className="label">Sale Price *</label>
+                                    <input
+                                        type="number"
+                                        className="input input-bordered"
+                                        value={pickupSalePrice}
+                                        onChange={(e) => setPickupSalePrice(e.target.value)}
+                                        min="0"
+                                        step="0.01"
+                                    />
+                                </div>
+                            </div>
+                        </div>
                         <div className="modal-action">
-                            <button
-                                onClick={() => {
-                                    setShowBatchModal(false);
-                                    setAvailableBatches([]);
-                                    setSelectedVariantForBatch(null);
-                                }}
-                                className="btn btn-ghost"
-                            >
-                                Cancel
-                            </button>
+                            <button onClick={() => setShowPickupModal(false)} className="btn btn-ghost">Cancel</button>
+                            <button onClick={addPickupItem} className="btn bg-[#1e4d2b] text-white">Add Item</button>
                         </div>
                     </div>
                 </div>
@@ -2797,3 +1945,115 @@ export default function AddSale({
         </div>
     );
 }
+
+// ========== SELECTED ITEM CARD COMPONENT ==========
+const SelectedItemCard = ({
+    item,
+    index,
+    selectedUnits,
+    unitQuantities,
+    availableUnits,
+    priceManuallyEdited,
+    onUpdateItem,
+    onRemoveItem,
+    onUnitChange,
+    formatCurrency,
+    convertToBase,
+    convertFromBase
+}) => {
+    const itemKey = item.uniqueKey || index;
+    const availableUnitsList = availableUnits[item.uniqueKey] || [item.unit || "piece"];
+    const selectedUnit = selectedUnits[item.uniqueKey] || item.unit || "piece";
+    const unitQuantity = unitQuantities[item.uniqueKey] || item.unit_quantity || 1;
+    const isManuallyEdited = priceManuallyEdited[item.uniqueKey] || false;
+
+    return (
+        <div className="border border-gray-300 rounded-box p-4">
+            <div className="flex justify-between items-start mb-3">
+                <div>
+                    <h4 className="font-medium">{item.product_name}</h4>
+                    <p className="text-sm text-gray-600">
+                        <strong>Variant:</strong> {item.variant_attribute}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                        <strong>Batch:</strong> {item.batch_no || 'N/A'} 
+                        <span className="text-gray-600"> | <strong>Total Stock:</strong> {item?.stockQuantity || 0}</span>
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => onRemoveItem(index)}
+                    className="btn btn-xs btn-error"
+                >
+                    <Trash2 size={12} />
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="form-control">
+                    <label className="label">
+                        <span className="label-text">Unit</span>
+                    </label>
+                    <select
+                        className="select select-bordered select-sm"
+                        value={selectedUnit}
+                        onChange={(e) => onUnitChange(item.uniqueKey, e.target.value)}
+                    >
+                        {availableUnitsList.map((unit) => (
+                            <option key={unit} value={unit}>
+                                {unit.toUpperCase()}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="form-control">
+                    <label className="label">
+                        <span className="label-text">Quantity</span>
+                    </label>
+                    <input
+                        type="number"
+                        className="input input-bordered input-sm"
+                        value={unitQuantity}
+                        onChange={(e) => onUpdateItem(index, "unit_quantity", e.target.value)}
+                    />
+                </div>
+
+                <div className="form-control">
+                    <label className="label">
+                        <span className="label-text">
+                            Price {isManuallyEdited && "(Manual)"}
+                        </span>
+                    </label>
+                    <input
+                        type="number"
+                        step="0.01"
+                        className="input input-bordered input-sm"
+                        value={item.unit_price}
+                        onChange={(e) => onUpdateItem(index, "unit_price", e.target.value)}
+                    />
+                </div>
+
+                <div className="form-control">
+                    <label className="label">
+                        <span className="label-text">Total</span>
+                    </label>
+                    <input
+                        type="text"
+                        className="input input-bordered input-sm bg-gray-100"
+                        value={formatCurrency(item.total_price)}
+                        readOnly
+                    />
+                </div>
+            </div>
+
+            {item.product_unit_type && item.product_unit_type !== "piece" && (
+                <div className="mt-2 text-xs text-gray-600 bg-blue-50 p-2 rounded">
+                    <span className="font-medium">Stock:</span> {
+                        convertFromBase(item.stockBaseQuantity, selectedUnit, item.product_unit_type).toFixed(3)
+                    } {selectedUnit.toUpperCase()} available
+                </div>
+            )}
+        </div>
+    );
+};

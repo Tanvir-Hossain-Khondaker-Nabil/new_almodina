@@ -13,8 +13,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Supplier extends Model
 {
-   use HasFactory;
-   use BelongsToTenant;
+    use HasFactory;
+    use BelongsToTenant;
 
     protected $fillable = [
         'name',
@@ -29,6 +29,7 @@ class Supplier extends Model
         'due_amount',
         'is_active',
         'created_by',
+        'type',
         'outlet_id',
         'dealership_id',
         // 'send_welcome_sms'
@@ -38,20 +39,20 @@ class Supplier extends Model
     {
         static::addGlobalScope(new UserScope);
         static::addGlobalScope(new OutletScope);
-        
+
         // Automatically set outlet_id and created_by when creating
         static::creating(function ($attribute) {
             if (Auth::check()) {
                 $user = Auth::user();
                 $attribute->created_by = $user->id;
-                
+
                 // Get current outlet ID from user
                 if ($user->current_outlet_id) {
                     $attribute->outlet_id = $user->current_outlet_id;
                 }
             }
         });
-        
+
         // Prevent updating outlet_id once set
         static::updating(function ($attribute) {
             $originalOutletId = $attribute->getOriginal('outlet_id');
@@ -65,7 +66,7 @@ class Supplier extends Model
     //relationship to dealership
     public function dealership()
     {
-        return $this->belongsTo(DillerShip::class, 'dealership_id' , 'id');
+        return $this->belongsTo(DillerShip::class, 'dealership_id', 'id');
     }
 
     //relationship to creator
@@ -77,7 +78,7 @@ class Supplier extends Model
     //relationship to purchases
     public function purchases()
     {
-        return $this->hasMany(Purchase::class, 'supplier_id')->with('warehouse', 'creator','items');
+        return $this->hasMany(Purchase::class, 'supplier_id')->with('warehouse', 'creator', 'items');
     }
 
     //active scrope 
@@ -87,4 +88,4 @@ class Supplier extends Model
     }
 
 
-    }
+}

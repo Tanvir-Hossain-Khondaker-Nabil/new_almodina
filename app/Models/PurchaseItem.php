@@ -135,4 +135,5 @@ class PurchaseItem extends Model
 
         return max(0, $this->base_quantity - $soldBaseQuantity);
     }
+    
 }

@@ -183,9 +183,9 @@ class PurchaseController extends Controller
         $isShadowUser = ($user->type === 'shadow');
 
         return Inertia::render('Purchase/AddPurchase', [
-            'suppliers' => Supplier::all(),
+            'suppliers' => Supplier::where('type', 'global')->get(),
             'warehouses' => Warehouse::where('is_active', true)->get(),
-            'products' => Product::with('variants', 'brand')->get(),
+            'products' => Product::where('type', 'global')->with('variants', 'brand')->get(),
             'accounts' => Account::where('is_active', true)->get(),
             'isShadowUser' => $isShadowUser,
             'unitConversions' => $this->getUnitConversions()
