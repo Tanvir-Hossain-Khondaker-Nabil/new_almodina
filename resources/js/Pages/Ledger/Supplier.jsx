@@ -42,7 +42,7 @@ import {
     Wallet,
     XCircle,
 } from "lucide-react";
-import { useEffect, useState ,useRef} from "react";
+import { useEffect, useState, useRef } from "react";
 import { Line, Pie } from "react-chartjs-2";
 import { toast } from "react-toastify";
 import Pagination from "../../components/Pagination";
@@ -130,8 +130,8 @@ export default function SupplierLedger({
             onError: (errors) => {
                 toast.error(
                     errors.paid_amount ||
-                        errors.account_id ||
-                        "An error occurred while processing the advance payment.",
+                    errors.account_id ||
+                    "An error occurred while processing the advance payment.",
                 );
             },
         });
@@ -508,8 +508,8 @@ export default function SupplierLedger({
             onError: (errors) => {
                 toast.error(
                     errors.paid_amount ||
-                        errors.account_id ||
-                        "An error occurred while processing the payment.",
+                    errors.account_id ||
+                    "An error occurred while processing the payment.",
                 );
                 // alert(Object.values(errors).join('\n') || 'An error occurred while processing the payment.');
             },
@@ -648,7 +648,7 @@ export default function SupplierLedger({
                                 </div>
 
                                 {/* Payment Options */}
-                                <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                                {/* <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
                                     <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                                         <CreditCardIcon className="h-4 w-4" />
                                         Payment Options
@@ -673,19 +673,19 @@ export default function SupplierLedger({
                                                 </p>
                                             </div>
                                         </label>
-                                        {/* <label className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="payment_option"
-                        checked={isPartialPayment}
-                        onChange={() => setIsPartialPayment(true)}
-                        className="h-4 w-4 text-orange-600"
-                      />
-                      <div>
-                        <span className="font-medium">Partial Payment</span>
-                        <p className="text-xs text-gray-500">Pay selected invoices</p>
-                      </div>
-                    </label> */}
+                                        <label className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                                            <input
+                                                type="radio"
+                                                name="payment_option"
+                                                checked={isPartialPayment}
+                                                onChange={() => setIsPartialPayment(true)}
+                                                className="h-4 w-4 text-orange-600"
+                                            />
+                                            <div>
+                                                <span className="font-medium">Partial Payment</span>
+                                                <p className="text-xs text-gray-500">Pay selected invoices</p>
+                                            </div>
+                                        </label>
                                     </div>
 
                                     {isPartialPayment && (
@@ -719,7 +719,7 @@ export default function SupplierLedger({
                                             </div>
                                         </div>
                                     )}
-                                </div>
+                                </div> */}
                             </div>
 
                             {/* Middle Column - Payment Form */}
@@ -833,7 +833,7 @@ export default function SupplierLedger({
                                                     {account.name} (৳
                                                     {formatCurrency(
                                                         account.current_balance ||
-                                                            account.balance,
+                                                        account.balance,
                                                     )}
                                                     )
                                                 </option>
@@ -934,9 +934,9 @@ export default function SupplierLedger({
                                         disabled={
                                             paidAmount <= 0 ||
                                             paidAmount >
-                                                (isPartialPayment
-                                                    ? selectedDue
-                                                    : dueAmount)
+                                            (isPartialPayment
+                                                ? selectedDue
+                                                : dueAmount)
                                         }
                                         className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700
                              text-white font-medium rounded-lg hover:from-orange-700
@@ -974,23 +974,22 @@ export default function SupplierLedger({
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div className="flex items-center gap-2">
                                                         <div
-                                                            className={`h-4 w-4 rounded-full border flex items-center justify-center ${
-                                                                selectedPurchases.some(
-                                                                    (p) =>
-                                                                        p.id ===
-                                                                        purchase.id,
-                                                                )
+                                                            className={`h-4 w-4 rounded-full border flex items-center justify-center ${selectedPurchases.some(
+                                                                (p) =>
+                                                                    p.id ===
+                                                                    purchase.id,
+                                                            )
                                                                     ? "bg-orange-600 border-orange-600"
                                                                     : "border-gray-300"
-                                                            }`}
+                                                                }`}
                                                         >
                                                             {selectedPurchases.some(
                                                                 (p) =>
                                                                     p.id ===
                                                                     purchase.id,
                                                             ) && (
-                                                                <Check className="h-3 w-3 text-white" />
-                                                            )}
+                                                                    <Check className="h-3 w-3 text-white" />
+                                                                )}
                                                         </div>
                                                         <span className="font-medium text-gray-900">
                                                             {purchase.purchase_no ||
@@ -1081,11 +1080,10 @@ export default function SupplierLedger({
                                                 !showDueClearance,
                                             )
                                         }
-                                        className={`px-4 py-2.5 text-sm font-medium rounded-xl flex items-center gap-2 shadow-sm hover:shadow transition-all ${
-                                            showDueClearance
+                                        className={`px-4 py-2.5 text-sm font-medium rounded-xl flex items-center gap-2 shadow-sm hover:shadow transition-all ${showDueClearance
                                                 ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
                                                 : "bg-gradient-to-r from-orange-600 to-orange-700 text-white hover:from-orange-700 hover:to-orange-800"
-                                        }`}
+                                            }`}
                                     >
                                         <CheckCircle className="h-4 w-4" />
                                         {showDueClearance
@@ -1419,11 +1417,10 @@ export default function SupplierLedger({
                         <nav className="flex flex-wrap px-6" aria-label="Tabs">
                             <button
                                 onClick={() => setActiveTab("transactions")}
-                                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                                    activeTab === "transactions"
+                                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "transactions"
                                         ? "border-orange-600 text-orange-600"
                                         : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                                }`}
+                                    }`}
                             >
                                 <div className="flex items-center gap-2">
                                     <Receipt className="h-4 w-4" />
@@ -1432,11 +1429,10 @@ export default function SupplierLedger({
                             </button>
                             <button
                                 onClick={() => setActiveTab("details")}
-                                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                                    activeTab === "details"
+                                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "details"
                                         ? "border-orange-600 text-orange-600"
                                         : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                                }`}
+                                    }`}
                             >
                                 <div className="flex items-center gap-2">
                                     <Building2 className="h-4 w-4" />
@@ -1526,19 +1522,19 @@ export default function SupplierLedger({
                                                                     </div>
                                                                     {purchase
                                                                         .items?.[0] && (
-                                                                        <div className="text-xs text-gray-500 truncate max-w-xs">
-                                                                            {
-                                                                                purchase
-                                                                                    .items[0]
-                                                                                    .product_name
-                                                                            }
-                                                                            {purchase
-                                                                                .items
-                                                                                ?.length >
-                                                                                1 &&
-                                                                                ` +${purchase.items.length - 1} more`}
-                                                                        </div>
-                                                                    )}
+                                                                            <div className="text-xs text-gray-500 truncate max-w-xs">
+                                                                                {
+                                                                                    purchase
+                                                                                        .items[0]
+                                                                                        .product_name
+                                                                                }
+                                                                                {purchase
+                                                                                    .items
+                                                                                    ?.length >
+                                                                                    1 &&
+                                                                                    ` +${purchase.items.length - 1} more`}
+                                                                            </div>
+                                                                        )}
                                                                 </td>
                                                                 <td className="px-4 py-4 whitespace-nowrap">
                                                                     {getPaymentMethodBadge(
@@ -1566,7 +1562,7 @@ export default function SupplierLedger({
                                                                         ৳
                                                                         {formatCurrency(
                                                                             purchase.paid_amount ||
-                                                                                0,
+                                                                            0,
                                                                         )}
                                                                     </div>
                                                                 </td>
@@ -1708,9 +1704,9 @@ export default function SupplierLedger({
                                                 <span className="text-sm font-medium text-gray-900">
                                                     {purchasesData.length > 0
                                                         ? formatDate(
-                                                              purchasesData[0]
-                                                                  ?.created_at,
-                                                          )
+                                                            purchasesData[0]
+                                                                ?.created_at,
+                                                        )
                                                         : "No purchases yet"}
                                                 </span>
                                             </div>
@@ -1721,11 +1717,11 @@ export default function SupplierLedger({
                                                 <span className="text-sm font-medium text-gray-900">
                                                     {purchasesData.length > 0
                                                         ? formatDate(
-                                                              purchasesData[
-                                                                  purchasesData.length -
-                                                                      1
-                                                              ]?.created_at,
-                                                          )
+                                                            purchasesData[
+                                                                purchasesData.length -
+                                                                1
+                                                            ]?.created_at,
+                                                        )
                                                         : "No purchases yet"}
                                                 </span>
                                             </div>

@@ -28,6 +28,7 @@ class SalesReturn extends Model
         'return_quantity',
         'created_by',
         'outlet_id',
+        'account_id'
     ];
 
     protected static function booted()

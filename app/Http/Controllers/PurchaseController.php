@@ -82,8 +82,10 @@ class PurchaseController extends Controller
         $user = Auth::user();
         $isShadowUser = ($user->type === 'shadow');
 
-        $query = Purchase::latest()
-            ->with(['supplier', 'warehouse', 'items.product', 'items.variant']);
+        $query = Purchase::query()
+            ->with(['supplier', 'warehouse', 'items.product', 'items.variant'])
+            ->orderByDesc('purchase_date') // ✅ latest by purchase_date
+            ->orderByDesc('id');
 
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
@@ -115,7 +117,6 @@ class PurchaseController extends Controller
 
         $purchases = $query->paginate(10)->withQueryString();
 
-        // Attach item-wise stock/barcode info for index page
         $purchases->getCollection()->transform(function ($purchase) use ($isShadowUser) {
 
             if ($isShadowUser) {
@@ -125,10 +126,12 @@ class PurchaseController extends Controller
             if ($purchase->items) {
                 $purchase->items->transform(function ($item) {
 
-                    // Find stock for this purchase item by batch pattern: PO-{item_id}-XXXX
+                    // ✅ latest stock for this item
                     $stock = Stock::where('product_id', $item->product_id)
                         ->where('variant_id', $item->variant_id)
                         ->where('batch_no', 'LIKE', 'PO-' . $item->id . '-%')
+                        ->orderByDesc('created_at')
+                        ->orderByDesc('id')
                         ->first();
 
                     $item->stock = $stock ? [
@@ -210,8 +213,10 @@ class PurchaseController extends Controller
 
         if ($request->account_id) {
             $account = Account::find($request->account_id);
-            if (!$account) return back()->withErrors(['error' => 'Selected account not found']);
-            if (!$account->is_active) return back()->withErrors(['error' => 'Selected account is not active']);
+            if (!$account)
+                return back()->withErrors(['error' => 'Selected account not found']);
+            if (!$account->is_active)
+                return back()->withErrors(['error' => 'Selected account is not active']);
             $payment_type = $account->type ?? 'cash';
         }
 
@@ -480,7 +485,8 @@ class PurchaseController extends Controller
                     ->where('batch_no', 'LIKE', 'PO-' . $item->id . '-%')
                     ->first();
 
-                if (!$stock) continue;
+                if (!$stock)
+                    continue;
 
                 if (empty($stock->barcode)) {
                     $this->generateStockBarcodeFromBatch($stock);
@@ -582,8 +588,44 @@ class PurchaseController extends Controller
         $user = Auth::user();
         $isShadowUser = ($user->type === 'shadow');
 
-        $purchase = Purchase::with(['supplier', 'warehouse', 'items.product', 'items.variant', 'payments'])
-            ->findOrFail($id);
+        $purchase = Purchase::with([
+            'supplier',
+            'warehouse',
+            'items.product',
+            'items.variant',
+            'payments'
+        ])->findOrFail($id);
+
+        // ✅ Attach CURRENT stock (remaining qty) for each purchase item
+        $purchase->items->transform(function ($item) use ($purchase) {
+
+            $warehouseId = $item->warehouse_id ?? $purchase->warehouse_id;
+
+            $stock = Stock::where('warehouse_id', $warehouseId)
+                ->where('product_id', $item->product_id)
+                ->where('variant_id', $item->variant_id)
+                ->where('batch_no', 'LIKE', 'PO-' . $item->id . '-%')
+                ->orderByDesc('id')
+                ->first();
+
+            $item->stock_details = $stock ? [
+                'id' => $stock->id,
+                'warehouse_id' => $stock->warehouse_id,
+                'batch_no' => $stock->batch_no,
+                'barcode' => $stock->barcode,
+                'barcode_path' => $stock->barcode_path,
+                'quantity' => (float) ($stock->quantity ?? 0),
+                'base_quantity' => (float) ($stock->base_quantity ?? 0),
+                'available_base_quantity' => (float) ($stock->available_base_quantity ?? 0),
+                'purchase_price' => (float) ($stock->purchase_price ?? 0),
+                'sale_price' => (float) ($stock->sale_price ?? 0),
+                'shadow_purchase_price' => (float) ($stock->shadow_purchase_price ?? 0),
+                'shadow_sale_price' => (float) ($stock->shadow_sale_price ?? 0),
+                'created_at' => optional($stock->created_at)->toDateTimeString(),
+            ] : null;
+
+            return $item;
+        });
 
         if ($isShadowUser) {
             $purchase = $this->transformToShadowData($purchase);
@@ -607,199 +649,329 @@ class PurchaseController extends Controller
         $isShadowUser = ($user->type === 'shadow');
         $request->validated();
 
-        if ($user->role !== 'admin' && $user->id !== Purchase::find($id)->created_by) {
+        $purchase = Purchase::with(['items', 'payments'])->findOrFail($id);
+
+        // permission (keep your rules)
+        if ($user->role !== 'admin' && $user->id !== $purchase->created_by) {
             return back()->withErrors(['error' => 'You are not authorized to edit this purchase.']);
         }
-
-        $purchase = Purchase::with('items')->findOrFail($id);
 
         if ($purchase->status == 'approved' && $purchase->user_type == 'shadow') {
             return back()->withErrors(['error' => 'Cannot edit an approved shadow purchase.']);
         }
 
-        if (!$isShadowUser && $request->paid_amount > 0 && !$request->account_id) {
+        // Shadow user cannot pay
+        if ($isShadowUser) {
+            $request->merge([
+                'paid_amount' => 0,
+                'payment_status' => 'unpaid',
+                'account_id' => null,
+            ]);
+        }
+
+        if (!$isShadowUser && (float) $request->paid_amount > 0 && !$request->account_id) {
             return back()->withErrors(['error' => 'Please select a payment account when making payment']);
         }
 
-        $account = null;
-        if ($request->account_id) {
-            $account = Account::find($request->account_id);
-            if (!$account) return back()->withErrors(['error' => 'Selected account not found']);
-            if (!$account->is_active) return back()->withErrors(['error' => 'Selected account is not active']);
+        $newPaidAmount = (float) ($request->paid_amount ?? 0);
+        $newAccount = null;
+
+        if (!$isShadowUser && $request->account_id) {
+            $newAccount = Account::find($request->account_id);
+            if (!$newAccount)
+                return back()->withErrors(['error' => 'Selected account not found']);
+            if (!$newAccount->is_active)
+                return back()->withErrors(['error' => 'Selected account is not active']);
+        }
+
+        $payment_type = 'cash';
+        if ($request->account_id && $newAccount) {
+            $payment_type = $newAccount->type ?? 'cash';
         }
 
         $adjustamount = $request->adjust_from_advance ?? false;
-        $payment_type = 'cash';
-
-        if ($adjustamount == true) {
-            $supplier = Supplier::find($request->supplier_id);
-            $payment_type = 'advance_adjustment';
-
-            $previousAdjustment = $purchase->payment_type === 'advance_adjustment' ? $purchase->paid_amount : 0;
-            if ($previousAdjustment > 0) {
-                $supplier->update(['advance_amount' => $supplier->advance_amount + $previousAdjustment]);
-            }
-
-            if ($request->paid_amount > $supplier->advance_amount) {
-                return back()->withErrors(['error' => 'Advance adjustment cannot be greater than available advance amount.']);
-            }
-
-            $supplier->update(['advance_amount' => $supplier->advance_amount - $request->paid_amount]);
-        } else {
-            if ($purchase->payment_type === 'advance_adjustment') {
-                $supplier = Supplier::find($purchase->supplier_id);
-                $supplier->update(['advance_amount' => $supplier->advance_amount + $purchase->paid_amount]);
-            }
-        }
 
         DB::beginTransaction();
         try {
-            $totalAmount = 0;
-            foreach ($request->items as $item) {
-                $unitQuantity = (float) ($item['unit_quantity'] ?? $item['quantity'] ?? 0);
-                $unitPrice = (float) ($item['unit_price'] ?? 0);
-                $totalAmount += $unitQuantity * $unitPrice;
+
+            // -------------------------------
+            // 1) Advance adjustment rollback/apply
+            // -------------------------------
+            $supplier = Supplier::find($request->supplier_id);
+
+            if ($purchase->payment_type === 'advance_adjustment') {
+                $oldSupplier = Supplier::find($purchase->supplier_id);
+                if ($oldSupplier) {
+                    $oldSupplier->update([
+                        'advance_amount' => (float) ($oldSupplier->advance_amount ?? 0) + (float) ($purchase->paid_amount ?? 0)
+                    ]);
+                }
             }
 
-            $paidAmount = (float) ($request->paid_amount ?? 0);
-            $dueAmount = $totalAmount - $paidAmount;
+            if ($adjustamount) {
+                if (!$supplier)
+                    throw new \Exception("Supplier not found.");
+
+                $payment_type = 'advance_adjustment';
+
+                if ($newPaidAmount > (float) ($supplier->advance_amount ?? 0)) {
+                    throw new \Exception('Advance adjustment cannot be greater than available advance amount.');
+                }
+
+                $supplier->update([
+                    'advance_amount' => (float) $supplier->advance_amount - $newPaidAmount,
+                ]);
+
+                $request->merge(['account_id' => null]);
+                $newAccount = null;
+            }
+
+            // -------------------------------
+            // 2) Update items + stocks IN PLACE
+            // -------------------------------
+            $warehouseId = (int) $request->warehouse_id;
+
+            // Build quick lookup of old items by product+variant (assuming unique per purchase)
+            $oldItemsByKey = [];
+            foreach ($purchase->items as $oldItem) {
+                $k = $oldItem->product_id . ':' . $oldItem->variant_id;
+                $oldItemsByKey[$k] = $oldItem;
+            }
+
+            $seenKeys = [];
+
+            $newGrandTotal = 0;
+
+            foreach (($request->items ?? []) as $incoming) {
+
+                $productId = (int) ($incoming['product_id'] ?? 0);
+                $variantId = (int) ($incoming['variant_id'] ?? 0);
+                if (!$productId || !$variantId)
+                    continue;
+
+                $key = $productId . ':' . $variantId;
+                $seenKeys[] = $key;
+
+                $product = Product::find($productId);
+                if (!$product)
+                    throw new \Exception("Product not found: {$productId}");
+
+                $unitType = $product->unit_type ?? 'piece';
+                $unit = $incoming['unit'] ?? ($product->default_unit ?? 'piece');
+
+                // incoming quantity from UI
+                $incomingQty = (float) ($incoming['unit_quantity'] ?? $incoming['quantity'] ?? 0);
+
+                $unitPrice = $isShadowUser ? 0 : (float) ($incoming['unit_price'] ?? 0);
+                $salePrice = $isShadowUser ? 0 : (float) ($incoming['sale_price'] ?? 0);
+
+                if (!$isShadowUser && $salePrice <= 0) {
+                    throw new \Exception("Sale price must be greater than 0 for product ID: {$productId}");
+                }
+
+                // ✅ EXISTING ITEM: interpret incomingQty as DESIRED STOCK remaining
+                if (isset($oldItemsByKey[$key])) {
+
+                    $oldItem = $oldItemsByKey[$key];
+
+                    // find the stock linked by batch pattern
+                    $stock = Stock::where('warehouse_id', $purchase->warehouse_id) // old warehouse
+                        ->where('product_id', $oldItem->product_id)
+                        ->where('variant_id', $oldItem->variant_id)
+                        ->where('batch_no', 'LIKE', 'PO-' . $oldItem->id . '-%')
+                        ->orderByDesc('id')
+                        ->first();
+
+                    $oldPurchaseQty = (float) ($oldItem->unit_quantity ?? $oldItem->quantity ?? 0);
+                    $currentStockQty = (float) ($stock->quantity ?? 0);
+
+                    $soldQty = max(0, $oldPurchaseQty - $currentStockQty);
+
+                    $desiredStockQty = max(0, $incomingQty);
+
+                    // ✅ NEW PURCHASE QTY = sold + desired remaining
+                    $newPurchaseQty = $soldQty + $desiredStockQty;
+
+                    // base quantity
+                    $baseQuantity = $this->convertToBase($newPurchaseQty, $unit, $unitType);
+
+                    $totalPrice = $newPurchaseQty * $unitPrice;
+
+                    // update purchase item
+                    $oldItem->update([
+                        'warehouse_id' => $warehouseId,
+                        'quantity' => $newPurchaseQty,
+                        'unit_quantity' => $newPurchaseQty,
+                        'base_quantity' => $baseQuantity,
+                        'unit' => $unit,
+                        'unit_price' => $unitPrice,
+                        'sale_price' => $salePrice,
+                        'total_price' => $totalPrice,
+                        'sale_unit' => $incoming['sale_unit'] ?? $oldItem->sale_unit,
+                    ]);
+
+                    // update stock remaining (this is what you actually want)
+                    if ($stock) {
+                        $stockBase = $this->convertToBase($desiredStockQty, $unit, $unitType);
+
+                        $stock->update([
+                            'warehouse_id' => $warehouseId, // move stock if warehouse changed
+                            'quantity' => $desiredStockQty,
+                            'base_quantity' => $stockBase,
+                            'purchase_price' => $unitPrice,
+                            'sale_price' => $salePrice,
+                        ]);
+                    }
+
+                    $newGrandTotal += $totalPrice;
+
+                } else {
+
+                    // ✅ NEW ITEM: normal purchase behavior
+                    $unitQuantity = max(0, $incomingQty);
+                    if ($unitQuantity <= 0) {
+                        throw new \Exception("Quantity must be > 0 for product ID: {$productId}");
+                    }
+
+                    $baseQuantity = $this->convertToBase($unitQuantity, $unit, $unitType);
+                    $totalPrice = $unitQuantity * $unitPrice;
+
+                    $purchaseItem = $purchase->items()->create([
+                        'product_id' => $productId,
+                        'variant_id' => $variantId,
+                        'quantity' => $unitQuantity,
+                        'unit' => $unit,
+                        'unit_quantity' => $unitQuantity,
+                        'base_quantity' => $baseQuantity,
+                        'unit_price' => $unitPrice,
+                        'sale_price' => $salePrice,
+                        'total_price' => $totalPrice,
+                        'created_by' => $user->id,
+                        'warehouse_id' => $warehouseId,
+                        'sale_unit' => $incoming['sale_unit'] ?? null,
+                    ]);
+
+                    $batchNo = 'PO-' . $purchaseItem->id . '-' . Str::upper(Str::random(4));
+
+                    $stock = Stock::create([
+                        'warehouse_id' => $warehouseId,
+                        'product_id' => $productId,
+                        'variant_id' => $variantId,
+                        'quantity' => $unitQuantity,
+                        'unit' => $unit,
+                        'base_quantity' => $baseQuantity,
+                        'purchase_price' => $unitPrice,
+                        'sale_price' => $salePrice,
+                        'created_by' => $user->id,
+                        'batch_no' => $batchNo,
+                    ]);
+
+                    $this->generateStockBarcodeFromBatch($stock);
+
+                    $newGrandTotal += $totalPrice;
+                }
+            }
+
+            // -------------------------------
+            // 3) Remove deleted items (if any)
+            //    (only delete those not in request)
+            // -------------------------------
+            foreach ($purchase->items as $oldItem) {
+                $k = $oldItem->product_id . ':' . $oldItem->variant_id;
+                if (!in_array($k, $seenKeys, true)) {
+
+                    // delete stock for that item
+                    $stock = Stock::where('warehouse_id', $purchase->warehouse_id)
+                        ->where('product_id', $oldItem->product_id)
+                        ->where('variant_id', $oldItem->variant_id)
+                        ->where('batch_no', 'LIKE', 'PO-' . $oldItem->id . '-%')
+                        ->first();
+
+                    if ($stock)
+                        $stock->delete();
+                    $oldItem->delete();
+                }
+            }
+
+            // -------------------------------
+            // 4) Update purchase master totals
+            // -------------------------------
+            $dueAmount = max(0, $newGrandTotal - $newPaidAmount);
 
             $purchase->update([
                 'supplier_id' => $request->supplier_id,
-                'warehouse_id' => $request->warehouse_id,
+                'warehouse_id' => $warehouseId,
                 'purchase_date' => $request->purchase_date,
-                'grand_total' => $totalAmount,
-                'paid_amount' => $paidAmount,
+                'grand_total' => $newGrandTotal,
+                'paid_amount' => $newPaidAmount,
                 'due_amount' => $dueAmount,
                 'payment_status' => $request->payment_status,
                 'notes' => $request->notes,
-                'payment_type' => $payment_type
+                'payment_type' => $payment_type,
             ]);
 
-            // ✅ Delete existing items + delete their stock by batch
-            foreach ($purchase->items as $item) {
-                $stock = Stock::where('warehouse_id', $purchase->warehouse_id)
-                    ->where('product_id', $item->product_id)
-                    ->where('variant_id', $item->variant_id)
-                    ->where('batch_no', 'LIKE', 'PO-' . $item->id . '-%')
-                    ->first();
-
-                if ($stock) {
-                    $stock->delete();
-                }
-
-                $item->delete();
-            }
-
-            // ✅ Recreate items + stock + barcode
-            foreach ($request->items as $item) {
-                $product = Product::find($item['product_id']);
-                $unitType = $product->unit_type ?? 'piece';
-                $unit = $item['unit'] ?? ($product->default_unit ?? 'piece');
-                $unitQuantity = (float) ($item['unit_quantity'] ?? $item['quantity'] ?? 1);
-
-                // Calculate base quantity
-                $baseQuantity = $this->convertToBase($unitQuantity, $unit, $unitType);
-
-                $unitPrice = $isShadowUser ? 0 : (float) ($item['unit_price'] ?? 0);
-                $salePrice = $isShadowUser ? 0 : (float) ($item['sale_price'] ?? 0);
-                $totalPrice = $unitQuantity * $unitPrice;
-
-                if (!$isShadowUser && $salePrice <= 0) {
-                    throw new \Exception("Sale price must be greater than 0 for product ID: {$item['product_id']}");
-                }
-
-                $purchaseItem = $purchase->items()->create([
-                    'product_id' => $item['product_id'],
-                    'variant_id' => $item['variant_id'],
-                    'quantity' => $unitQuantity,
-                    'unit' => $unit,
-                    'unit_quantity' => $unitQuantity,
-                    'base_quantity' => $baseQuantity,
-                    'unit_price' => $unitPrice,
-                    'sale_price' => $salePrice,
-                    'total_price' => $totalPrice,
-                    'created_by' => $user->id,
-                    'warehouse_id' => $request->warehouse_id
-                ]);
-
-                $batchNo = 'PO-' . $purchaseItem->id . '-' . Str::upper(Str::random(4));
-
-                $stock = Stock::create([
-                    'warehouse_id' => $request->warehouse_id,
-                    'product_id' => $item['product_id'],
-                    'variant_id' => $item['variant_id'],
-                    'quantity' => $unitQuantity,
-                    'unit' => $unit,
-                    'base_quantity' => $baseQuantity,
-                    'purchase_price' => $unitPrice,
-                    'sale_price' => $salePrice,
-                    'created_by' => $user->id,
-                    'batch_no' => $batchNo,
-                ]);
-
-                $this->generateStockBarcodeFromBatch($stock);
-            }
-
-            // Payment update logic (kept same as your style)
+            // -------------------------------
+            // 5) Payments (keep your existing payment logic)
+            // -------------------------------
             $payment = Payment::where('purchase_id', $purchase->id)->first();
 
-            if ($payment) {
-                if ($payment->account_id) {
-                    $oldAccount = Account::find($payment->account_id);
-                    if ($oldAccount) {
-                        $oldPaymentAmount = $payment->getSignedAmount();
-                        $oldAccount->updateBalance(abs($oldPaymentAmount), 'deposit');
+            // Restore old payment to old account
+            if ($payment && $payment->account_id) {
+                $oldAccount = Account::find($payment->account_id);
+                if ($oldAccount) {
+                    $oldAmountAbs = abs((float) $payment->amount);
+                    if ($oldAmountAbs > 0) {
+                        $oldAccount->updateBalance($oldAmountAbs, 'deposit');
                     }
                 }
+            }
 
-                if ($paidAmount <= 0) {
+            // Apply new payment
+            if ($newPaidAmount <= 0 || $isShadowUser || $adjustamount) {
+                if ($payment)
                     $payment->delete();
-                } else {
+            } else {
+                if ($newAccount) {
+                    if (!$newAccount->canWithdraw($newPaidAmount)) {
+                        throw new \Exception("Insufficient balance in account: {$newAccount->name}");
+                    }
+                    $newAccount->updateBalance($newPaidAmount, 'withdraw');
+                }
+
+                if ($payment) {
                     $payment->update([
-                        'amount' => -$paidAmount,
-                        'payment_method' => $request->payment_method ?? $payment_type,
+                        'amount' => -$newPaidAmount,
+                        'payment_method' => $request->payment_method ?? ($newAccount->type ?? 'cash'),
                         'note' => $request->notes,
                         'supplier_id' => $request->supplier_id,
-                        'account_id' => $request->account_id
+                        'account_id' => $request->account_id,
+                        'paid_at' => Carbon::now(),
+                        'created_by' => Auth::id(),
                     ]);
-
-                    if ($account) {
-                        if (!$account->canWithdraw($paidAmount)) {
-                            throw new \Exception("Insufficient balance in account: {$account->name}");
-                        }
-                        $account->updateBalance($paidAmount, 'withdraw');
-                    }
+                } else {
+                    Payment::create([
+                        'purchase_id' => $purchase->id,
+                        'amount' => -$newPaidAmount,
+                        'payment_method' => $request->payment_method ?? ($newAccount->type ?? 'cash'),
+                        'txn_ref' => $request->txn_ref ?? ('nexoryn-' . Str::random(10)),
+                        'note' => $request->notes,
+                        'supplier_id' => $request->supplier_id,
+                        'account_id' => $request->account_id,
+                        'paid_at' => Carbon::now(),
+                        'created_by' => Auth::id(),
+                    ]);
                 }
-            } elseif ($paidAmount > 0) {
-                if ($account) {
-                    if (!$account->canWithdraw($paidAmount)) {
-                        throw new \Exception("Insufficient balance in account: {$account->name}");
-                    }
-                    $account->updateBalance($paidAmount, 'withdraw');
-                }
-
-                Payment::create([
-                    'purchase_id' => $purchase->id,
-                    'amount' => -$paidAmount,
-                    'payment_method' => $request->payment_method ?? $payment_type,
-                    'txn_ref' => 'nexoryn-' . Str::random(10),
-                    'note' => $request->notes,
-                    'supplier_id' => $request->supplier_id,
-                    'account_id' => $request->account_id,
-                    'paid_at' => Carbon::now(),
-                    'created_by' => Auth::id()
-                ]);
             }
 
             DB::commit();
-
             return redirect()->route('purchase.list')->with('success', 'Purchase updated successfully');
+
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()->with('error', 'Error updating purchase: ' . $e->getMessage());
         }
     }
+
 
     public function destroy($id)
     {
@@ -825,7 +997,8 @@ class PurchaseController extends Controller
                     ->where('batch_no', 'LIKE', 'PO-' . $item->id . '-%')
                     ->first();
 
-                if ($stock) $stock->delete();
+                if ($stock)
+                    $stock->delete();
             }
 
             $purchase->delete();
@@ -854,7 +1027,8 @@ class PurchaseController extends Controller
             $paymentAmount = (float) $request->payment_amount;
             $account = Account::find($request->account_id);
 
-            if (!$account) return back()->withErrors(['error' => 'Selected account not found']);
+            if (!$account)
+                return back()->withErrors(['error' => 'Selected account not found']);
             if (!$account->canWithdraw($paymentAmount)) {
                 return back()->withErrors(['account_id' => 'Insufficient balance in selected account | Low Balance in your selected account']);
             }

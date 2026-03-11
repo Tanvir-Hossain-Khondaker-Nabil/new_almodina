@@ -568,7 +568,7 @@ export default function CustomerLedger({
                                 </div>
 
                                 {/* Payment Options */}
-                                <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                                {/* <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
                                     <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                                         <CreditCardIcon className="h-4 w-4" />
                                         Payment Options
@@ -593,19 +593,19 @@ export default function CustomerLedger({
                                                 </p>
                                             </div>
                                         </label>
-                                        {/* <label className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="payment_option"
-                        checked={isPartialPayment}
-                        onChange={() => setIsPartialPayment(true)}
-                        className="h-4 w-4 text-blue-600"
-                      />
-                      <div>
-                        <span className="font-medium">Partial Payment</span>
-                        <p className="text-xs text-gray-500">Pay selected invoices</p>
-                      </div>
-                    </label> */}
+                                        <label className="flex items-center gap-2 p-2 bg-white rounded border hover:bg-blue-50 cursor-pointer">
+                                            <input
+                                                type="radio"
+                                                name="payment_option"
+                                                checked={isPartialPayment}
+                                                onChange={() => setIsPartialPayment(true)}
+                                                className="h-4 w-4 text-blue-600"
+                                            />
+                                            <div>
+                                                <span className="font-medium">Partial Payment</span>
+                                                <p className="text-xs text-gray-500">Pay selected invoices</p>
+                                            </div>
+                                            </label>
                                     </div>
 
                                     {isPartialPayment && (
@@ -639,7 +639,7 @@ export default function CustomerLedger({
                                             </div>
                                         </div>
                                     )}
-                                </div>
+                                </div> */}
                             </div>
 
                             {/* Middle Column - Payment Form */}

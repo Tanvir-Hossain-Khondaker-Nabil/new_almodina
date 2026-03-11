@@ -18,6 +18,7 @@ return new class extends Migration
             $table->unsignedBigInteger('account_id')->nullable();
 
             $table->string('invoice_no')->unique();
+            $table->string('discount_type')->nullable();
             $table->decimal('sub_total', 10, 2)->default(0);
             $table->decimal('discount', 10, 2)->default(0);
             $table->decimal('vat_tax', 10, 2)->default(0);

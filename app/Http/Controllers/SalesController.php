@@ -151,6 +151,7 @@ class SalesController extends Controller
      */
     private function indexView(Request $request, string $type): array
     {
+        
         $user = Auth::user();
         $isShadowUser = $user->type === 'shadow';
 

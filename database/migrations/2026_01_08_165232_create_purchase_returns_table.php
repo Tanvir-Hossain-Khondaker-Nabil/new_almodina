@@ -17,6 +17,8 @@ return new class extends Migration
             $table->unsignedBigInteger('purchase_id');
             $table->unsignedBigInteger('supplier_id');
             $table->unsignedBigInteger('warehouse_id');
+            $table->unsignedBigInteger('account_id')->nullable();
+
             $table->date('return_date');
             $table->enum('return_type', ['money_back', 'product_replacement']);
             $table->decimal('total_return_amount', 12, 2)->default(0);

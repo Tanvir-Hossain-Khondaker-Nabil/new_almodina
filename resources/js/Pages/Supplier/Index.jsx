@@ -742,7 +742,7 @@ export default function Suppliers({ suppliers, filters, accounts }) {
                                             />
                                         </div>
                                         {/* Quick Amount Buttons */}
-                                        <div className="flex gap-2 mt-3">
+                                        {/* <div className="flex gap-2 mt-3">
                                             {[25, 50, 75].map((percent) => (
                                                 <button
                                                     type="button"
@@ -761,7 +761,7 @@ export default function Suppliers({ suppliers, filters, accounts }) {
                                                     {percent}%
                                                 </button>
                                             ))}
-                                        </div>
+                                        </div> */}
                                         {clearDueErrors.paid_amount && (
                                             <div className="text-red-600 text-xs mt-2 flex items-center gap-2 bg-red-50 p-2 rounded-lg border border-red-200">
                                                 <AlertCircle size={12} />

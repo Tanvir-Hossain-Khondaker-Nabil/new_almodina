@@ -14,6 +14,8 @@ return new class extends Migration
         Schema::create('sales_returns', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('sale_id');
+            $table->unsignedBigInteger('account_id')->nullable();
+
             $table->unsignedBigInteger('customer_id')->nullable();
             $table->decimal('refunded_amount', 15, 2)->default(0);
             $table->decimal('shadow_refunded_amount', 15, 2)->default(0);

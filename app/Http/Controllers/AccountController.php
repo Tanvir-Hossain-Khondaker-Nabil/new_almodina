@@ -236,39 +236,54 @@ class AccountController extends Controller
     //withdraw method will be here
     public function withdraw(Request $request, Account $account)
     {
+        // ✅ Security: নিজের account ছাড়া অন্য account এ withdraw বন্ধ (আপনার সিস্টেমে user_id/owner_id অনুযায়ী adjust করবেন)
+        if ($account->user_id !== Auth::id()) {
+            abort(403, 'Unauthorized action.');
+        }
+
         $validated = $request->validate([
-            'amount' => [
-                'required',
-                'numeric',
-                'min:0.01',
-                function ($attribute, $value, $fail) use ($account) {
-                    if ($value > $account->current_balance) {
-                        $fail('Insufficient balance.');
-                    }
-                },
-            ],
-            'note' => 'nullable|string',
+            'amount' => 'required|numeric|min:0.01',
+            'note' => 'nullable|string|max:255',
         ]);
 
-        DB::transaction(function () use ($account, $validated) {
-            // Create payment record
-            $payment = Payment::create([
-                'account_id' => $account->id,
-                'amount' => $validated['amount'],
+        $amount = (float) $validated['amount'];
+
+        // ✅ Latest balance নিশ্চিত করতে row lock (race condition এ double withdraw আটকায়)
+        DB::transaction(function () use ($account, $amount, $validated) {
+
+            // row lock
+            $lockedAccount = Account::where('id', $account->id)->lockForUpdate()->first();
+
+            if (!$lockedAccount) {
+                abort(404, 'Account not found.');
+            }
+
+            if ($amount > (float) $lockedAccount->current_balance) {
+                // transaction এর ভিতরে throw করলে rollback হবে
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => 'Insufficient balance.',
+                ]);
+            }
+
+            // ✅ Payment row (withdraw => negative amount)
+            Payment::create([
+                'account_id' => $lockedAccount->id,
+                'amount' => -$amount,
                 'payment_method' => 'withdrawal',
                 'txn_ref' => 'WD-' . strtoupper(Str::random(8)),
-                'note' => 'withdraw',
+                'note' => $validated['note'] ?? 'withdrawal',
                 'paid_at' => now(),
                 'status' => 'completed',
                 'created_by' => Auth::id(),
             ]);
 
-            // Update account balance
-            $account->updateBalance($validated['amount'], 'debit');
+            // ✅ Update account balance (subtract)
+            $lockedAccount->update([
+                'current_balance' => DB::raw('current_balance - ' . $amount),
+            ]);
         });
 
-        return redirect()->back()
-            ->with('success', 'Withdrawal successful.');
+        return redirect()->back()->with('success', 'Withdrawal successful.');
     }
 
 

@@ -378,7 +378,7 @@ export default function Sidebar({ status, setStatus }) {
               <div className="bg-white p-1 rounded-xl shadow-lg">
                 <img
                   src="https://i.ibb.co.com/t0bPR3c/output-onlinepngtools-12-1.png"
-                  className="w-[80px] h-[80px]"
+                  className="h-[80px]"
                   alt=""
                 />
               </div>

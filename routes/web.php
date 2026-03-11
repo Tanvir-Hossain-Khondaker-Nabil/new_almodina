@@ -56,7 +56,7 @@ Route::middleware('guest')->controller(AuthController::class)->group(function ()
 
 
 
- 
+
 // auth routes
 Route::middleware('auth')->group(function () {
 
@@ -169,7 +169,7 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/create', 'create')->middleware('permission:sales.create')->name('sales.create');
         Route::get('/', 'index')->middleware('permission:sales.view')->name('sales.index');
-        Route::get('/list/{pos}', 'index')->middleware('permission:sales.view')->name('salesPos.index');
+        Route::get('/list/{pos}', 'indexPos')->middleware('permission:sales.view')->name('salesPos.index');
 
         Route::get('/{sale}', 'show')->whereNumber('sale')->middleware('permission:sales.view')->name('sales.show');
         Route::get('/{sale}/{print}', 'show')->whereNumber('sale')->middleware('permission:sales.print')->name('salesPrint.show');
@@ -187,11 +187,16 @@ Route::middleware('auth')->group(function () {
         ->name('sales.scan.barcode');
     Route::post('/pos/print-request/{id}', [SalesController::class, 'printRequest'])->name('print.request');
 
-
+    
     // Sales Return Routes
     Route::get('/return', [SalesReturnController::class, 'index'])
         ->middleware('permission:sales_return.view')
         ->name('salesReturn.list');
+
+    Route::get('/return/pickup', [SalesReturnController::class, 'indexPickup'])
+        ->middleware('permission:sales_return.pickup')
+        ->name('salesReturn.pickup');
+
 
     Route::get('/return/create', [SalesReturnController::class, 'create'])
         ->middleware('permission:sales_return.create')
@@ -200,6 +205,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/return/store', [SalesReturnController::class, 'store'])
         ->middleware('permission:sales_return.create')
         ->name('return.store');
+
+    Route::post('/approve/{id}/return', [SalesReturnController::class, 'approve'])
+        // ->middleware('permission:sales_return.approve')
+        ->name('return.approve');
 
     Route::get('/return/{id}', [SalesReturnController::class, 'show'])
         ->middleware('permission:sales_return.show')
@@ -214,8 +223,9 @@ Route::middleware('auth')->group(function () {
         ->name('salesReturn.update');
 
     Route::delete('/return/{id}', [SalesReturnController::class, 'destroy'])
-        ->middleware('permission:sales_return.delete')
+        ->middleware('permission:return.delete')
         ->name('salesReturn.destroy');
+
 
 
     // account route will be here
@@ -597,40 +607,44 @@ Route::middleware('auth')->group(function () {
             ->name('destroy');
     });
 
-        Route::get('/sms-test', function () {
+    Route::get('/sms-test', function () {
         return Inertia::render('Sms/Test');
     })->name('sms.test.page')->middleware('permission:sms_templates.view');
-    
+
     // API Routes
     Route::middleware('permission:sms_templates.view')->group(function () {
         Route::post('/sms/test', [SupplierController::class, 'sendTestSms'])->name('sms.test');
         Route::post('/sms/preview', [SupplierController::class, 'getSmsPreview'])->name('sms.preview');
     });
-    
+
     // SMS Templates Resource Routes with individual permissions
     Route::middleware('permission:sms_templates.view')->group(function () {
         Route::resource('sms-templates', SmsTemplateController::class)->except([
-            'create', 'store', 'edit', 'update', 'destroy'
+            'create',
+            'store',
+            'edit',
+            'update',
+            'destroy'
         ]);
     });
-    
+
     // Additional SMS Template routes with specific permissions
     Route::middleware('permission:sms_templates.create')->group(function () {
         Route::get('/sms-templates/create', [SmsTemplateController::class, 'create'])->name('sms-templates.create');
         Route::post('/sms-templates', [SmsTemplateController::class, 'store'])->name('sms-templates.store');
     });
-    
+
     Route::middleware('permission:sms_templates.edit')->group(function () {
         Route::get('/sms-templates/{smsTemplate}/edit', [SmsTemplateController::class, 'edit'])->name('sms-templates.edit');
         Route::put('/sms-templates/{smsTemplate}', [SmsTemplateController::class, 'update'])->name('sms-templates.update');
         Route::post('/sms-templates/{smsTemplate}/toggle-status', [SmsTemplateController::class, 'toggleStatus'])
             ->name('sms-templates.toggle-status');
     });
-    
+
     Route::middleware('permission:sms_templates.delete')->group(function () {
         Route::delete('/sms-templates/{smsTemplate}', [SmsTemplateController::class, 'destroy'])->name('sms-templates.destroy');
     });
-    
+
     // Show route (already included in resource but needs permission)
     Route::get('/sms-templates/{smsTemplate}', [SmsTemplateController::class, 'show'])
         ->name('sms-templates.show')

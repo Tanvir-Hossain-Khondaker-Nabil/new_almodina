@@ -25,8 +25,8 @@ class AttributeController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255|unique:attributes,name',
-            'code' => 'required|string|max:255|unique:attributes,code',
+            'name' => 'required|string|max:255',
+            'code' => 'required|string|max:255',
             'values' => 'required|array|min:1',
             'values.*.value' => 'required|string|max:255',
             'values.*.code' => 'required|string|max:255',
@@ -63,8 +63,8 @@ class AttributeController extends Controller
     public function update(Request $request, Attribute $attribute)
     {
         $request->validate([
-            'name' => 'required|string|max:255|unique:attributes,name,' . $attribute->id,
-            'code' => 'required|string|max:255|unique:attributes,code,' . $attribute->id,
+            'name' => 'required|string|max:255',
+            'code' => 'required|string|max:255',
             'values' => 'required|array|min:1',
             'values.*.value' => 'required|string|max:255',
             'values.*.code' => 'required|string|max:255',
@@ -124,7 +124,7 @@ class AttributeController extends Controller
     {
         $request->validate([
             'value' => 'required|string|max:255',
-            'code' => 'required|string|max:255|unique:attribute_values,code',
+            'code' => 'required|string|max:255',
         ]);
 
         try {

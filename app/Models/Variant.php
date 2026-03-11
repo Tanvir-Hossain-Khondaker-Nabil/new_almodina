@@ -63,16 +63,12 @@ class Variant extends Model
         return $this->hasOne(Stock::class, 'variant_id', 'id');
     }
 
-    public function stocks(): HasOne
-    {
-        return $this->hasOne(Stock::class, 'variant_id', 'id');
-    }
 
     // Remove duplicate stocks() method if it's the same as stock()
-    // public function stocks(): HasOne
-    // {
-    //     return $this->hasOne(Stock::class, 'variant_id', 'id');
-    // }
+    public function stocks()
+    {
+        return $this->hasMany(Stock::class, 'variant_id', 'id');
+    }
 
     // Helper method to get attribute values as string
     public function getVariantNameAttribute(): string

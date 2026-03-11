@@ -14,6 +14,7 @@ import { useTranslation } from "../../hooks/useTranslation";
 export default function AddSalesReturn({
     sale,
     saleItems,
+    accounts,
     sales,
     products,
     unitConversions = {
@@ -534,7 +535,6 @@ export default function AddSalesReturn({
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                        {/* লেফট কলাম - রিটার্ন ডিটেইলস */}
                         <div className="lg:col-span-1 space-y-4">
                             <div className="form-control">
                                 <label className="label">
@@ -598,6 +598,26 @@ export default function AddSalesReturn({
                             </div>
 
 
+                            {returnType == 'money_back' && (
+                                <div className="form-control">
+                                    <label className="label">
+                                        <span className="label-text font-semibold">{t('sales_return.account', 'Account')} *</span>
+                                    </label>
+                                    <select
+                                        className="select select-bordered w-full"
+                                        value={form.data.account_id}
+                                        onChange={(e) => form.setData("account_id", e.target.value)}
+                                        required
+                                    >
+                                        <option value="">{t('sales_return.select_account', 'Select Account')}</option>
+                                        {accounts.map((account) => (
+                                            <option key={account.id} value={account.id}>
+                                                {account.name} ({account.current_balance} tk)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
 
                             <div className="form-control">
                                 <label className="label">
@@ -609,7 +629,7 @@ export default function AddSalesReturn({
                                     value={form.data.reason}
                                     onChange={(e) => form.setData("reason", e.target.value)}
                                     placeholder="Explain why customer is returning these items..."
-                                // required
+                                
                                 />
                                 {validationErrors.reason && (
                                     <div className="text-error text-xs mt-1">{validationErrors.reason}</div>

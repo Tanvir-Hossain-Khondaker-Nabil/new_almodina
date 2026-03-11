@@ -1304,13 +1304,13 @@ export default function AddSale({
                                                                     )}
 
                                                                     <div className="mt-2 flex items-center gap-2">
-                                                                        <button
+                                                                        {/* <button
                                                                             type="button"
                                                                             className="btn btn-xs btn-square btn-outline border-gray-300 hover:bg-gray-100"
                                                                             onClick={() => changeQty(i.key, n(i.qty) - 1)}
                                                                         >
                                                                             <Minus size={12} className="text-gray-700" />
-                                                                        </button>
+                                                                        </button> */}
 
                                                                         <input
                                                                             className="input input-bordered input-xs !w-[100px] text-center font-medium"
@@ -1319,13 +1319,13 @@ export default function AddSale({
                                                                             onChange={(e) => changeQty(i.key, Number(e.target.value))}
                                                                         />
 
-                                                                        <button
+                                                                        {/* <button
                                                                             type="button"
                                                                             className="btn btn-xs btn-square btn-outline border-gray-300 hover:bg-gray-100"
                                                                             onClick={() => changeQty(i.key, n(i.qty) + (i.is_fraction_allowed ? 0.001 : 1))}
                                                                         >
                                                                             <Plus size={12} className="text-gray-700" />
-                                                                        </button>
+                                                                        </button> */}
                                                                     </div>
 
                                                                     <div className="text-xs text-gray-500 mt-1">

@@ -461,13 +461,20 @@ class PurchaseReturnController extends Controller
 
         DB::beginTransaction();
         try {
-            $purchaseReturn = PurchaseReturn::with(['items', 'purchase'])->findOrFail($id);
+            $purchaseReturn = PurchaseReturn::with([
+                'items.product',
+                'items.variant',
+                'purchase'
+            ])->findOrFail($id);
 
             if ($purchaseReturn->status !== 'pending') {
                 throw new \Exception('Only pending returns can be approved.');
             }
 
-            // Check stock availability for product replacement returns
+            // ✅ Only for product_replacement: check replacement stock availability (if you want)
+            // আপনার আগের logic অনুযায়ী "returned items" এর stock check করছিলেন।
+            // Replacement return এ সাধারণত returned items warehouse এ থাকেই, তাই check না করলেও চলে,
+            // কিন্তু আপনার system এ যদি outbound লাগে, রাখলাম optional.
             if ($purchaseReturn->return_type === 'product_replacement') {
                 foreach ($purchaseReturn->items as $item) {
                     $stock = Stock::where('warehouse_id', $purchaseReturn->warehouse_id)
@@ -475,11 +482,14 @@ class PurchaseReturnController extends Controller
                         ->where('variant_id', $item->variant_id)
                         ->first();
 
+                    // যদি আপনার policy: replacement approve করতে current stock থাকতে হবে
                     if (!$stock || $stock->quantity < $item->return_quantity) {
-                        throw new \Exception('Insufficient stock for product: ' .
+                        throw new \Exception(
+                            'Insufficient stock for product: ' .
                             ($item->product->name ?? 'Unknown') .
                             '. Available: ' . ($stock ? $stock->quantity : 0) .
-                            ', Requested: ' . $item->return_quantity);
+                            ', Requested: ' . $item->return_quantity
+                        );
                     }
                 }
             }
@@ -493,7 +503,6 @@ class PurchaseReturnController extends Controller
             $purchaseReturn->items()->update(['status' => 'approved']);
 
             DB::commit();
-
             return redirect()->back()->with('success', 'Purchase return approved successfully.');
 
         } catch (\Exception $e) {
@@ -512,10 +521,12 @@ class PurchaseReturnController extends Controller
         try {
             $purchaseReturn = PurchaseReturn::with([
                 'purchase',
-                'replacementProducts',
                 'items.product',
+                'items.variant',
                 'items.purchaseItem',
-                'supplier'
+                'replacementProducts.product',
+                'replacementProducts.variant',
+                'supplier',
             ])->findOrFail($id);
 
             if ($purchaseReturn->status !== 'approved') {
@@ -525,47 +536,61 @@ class PurchaseReturnController extends Controller
             $purchase = $purchaseReturn->purchase;
 
             // ============================================
-            // STOCK UPDATES BASED ON RETURN TYPE
+            // MONEY BACK
             // ============================================
             if ($purchaseReturn->return_type === 'money_back') {
-                // For money back returns - DECREASE STOCK (items go back to supplier)
+
+                // ✅ 1) STOCK decrease (items go back to supplier)
                 foreach ($purchaseReturn->items as $item) {
                     $stock = Stock::where('warehouse_id', $purchaseReturn->warehouse_id)
                         ->where('product_id', $item->product_id)
                         ->where('variant_id', $item->variant_id)
+                        ->lockForUpdate()
                         ->first();
 
-                    if ($stock) {
-                        // Decrease stock quantity (items returned to supplier)
-                        $stock->decrement('quantity', $item->return_quantity);
-
-                        Log::info('Stock decreased for money back return', [
-                            'purchase_return_id' => $purchaseReturn->id,
-                            'return_no' => $purchaseReturn->return_no,
-                            'stock_id' => $stock->id,
-                            'product_id' => $item->product_id,
-                            'quantity_decreased' => $item->return_quantity,
-                            'remaining_quantity' => $stock->fresh()->quantity
-                        ]);
-                    } else {
-                        throw new \Exception("Stock not found for product ID: {$item->product_id}");
+                    if (!$stock) {
+                        throw new \Exception("Stock not found for product ID: {$item->product_id}, variant: {$item->variant_id}");
                     }
+
+                    if ($stock->quantity < $item->return_quantity) {
+                        throw new \Exception(
+                            'Insufficient stock for product: ' .
+                            ($item->product->name ?? 'Unknown') .
+                            ". Available: {$stock->quantity}, Required: {$item->return_quantity}"
+                        );
+                    }
+
+                    $stock->decrement('quantity', $item->return_quantity);
+
+                    Log::info('Stock decreased for money back return', [
+                        'purchase_return_id' => $purchaseReturn->id,
+                        'return_no' => $purchaseReturn->return_no,
+                        'stock_id' => $stock->id,
+                        'product_id' => $item->product_id,
+                        'variant_id' => $item->variant_id,
+                        'quantity_decreased' => $item->return_quantity,
+                        'remaining_quantity' => $stock->fresh()->quantity,
+                    ]);
                 }
 
-                // Process financial refund
+                // ✅ 2) Financial (supplier refund_received -> account PLUS)
                 if ($purchaseReturn->total_return_amount > 0) {
-                    // Update purchase amounts
+
+                    // ---- আপনার existing logic (as-is) ----
                     $purchase->increment('paid_amount', $purchaseReturn->total_return_amount);
                     $purchase->decrement('due_amount', min($purchaseReturn->total_return_amount, $purchase->due_amount));
 
-                    // Update payment status
-                    $paymentStatus = $purchase->due_amount <= 0 ? 'paid' : ($purchase->paid_amount > 0 ? 'partial' : 'unpaid');
-                    $purchase->update(['payment_status' => $paymentStatus]);
+                    $paymentStatus = $purchase->due_amount <= 0
+                        ? 'paid'
+                        : ($purchase->paid_amount > 0 ? 'partial' : 'unpaid');
 
-                    // Create payment record for refund received
+                    $purchase->update(['payment_status' => $paymentStatus]);
+                    // --------------------------------------
+
+                    // ✅ Payment record (money IN)
                     Payment::create([
                         'purchase_id' => $purchase->id,
-                        'amount' => $purchaseReturn->total_return_amount,
+                        'amount' => $purchaseReturn->total_return_amount, // ✅ plus
                         'payment_method' => $purchaseReturn->payment_type ?? 'cash',
                         'txn_ref' => 'REFUND-' . $purchaseReturn->return_no,
                         'note' => 'Refund received for return: ' . $purchaseReturn->return_no,
@@ -573,33 +598,37 @@ class PurchaseReturnController extends Controller
                         'account_id' => $purchaseReturn->account_id,
                         'paid_at' => now(),
                         'created_by' => $user->id,
-                        'type' => 'refund_received'
+                        'type' => 'refund_received',
+                        // 'status'       => 'completed', // যদি column থাকে রাখুন
                     ]);
 
-                    // Update account balance if account specified
+                    // ✅ Account balance PLUS (MUST be credit)
                     if ($purchaseReturn->account_id) {
-                        $account = Account::find($purchaseReturn->account_id);
+                        $account = Account::where('id', $purchaseReturn->account_id)->lockForUpdate()->first();
                         if ($account) {
-                            $account->updateBalance($purchaseReturn->total_return_amount, 'deposit');
+                            $account->updateBalance($purchaseReturn->total_return_amount, 'credit'); // ✅ FIXED
                         }
                     }
                 }
 
+                // ============================================
+                // PRODUCT REPLACEMENT
+                // ============================================
             } elseif ($purchaseReturn->return_type === 'product_replacement') {
-                // For product replacement returns - NO STOCK DECREASE
-                // (Items stay in warehouse, just exchanged for other products)
-                // But we need to INCREASE stock for replacement products
 
+                // ✅ Returned items stock decrease হবে না
                 Log::info('Product replacement return - no stock decrease for returned items', [
                     'purchase_return_id' => $purchaseReturn->id,
                     'return_no' => $purchaseReturn->return_no
                 ]);
 
-                // Increase stock for replacement products
+                // ✅ Replacement products stock increase হবে
                 foreach ($purchaseReturn->replacementProducts as $replacement) {
+
                     $stock = Stock::where('warehouse_id', $purchaseReturn->warehouse_id)
                         ->where('product_id', $replacement->product_id)
                         ->where('variant_id', $replacement->variant_id)
+                        ->lockForUpdate()
                         ->first();
 
                     if ($stock) {
@@ -609,10 +638,10 @@ class PurchaseReturnController extends Controller
                             'purchase_return_id' => $purchaseReturn->id,
                             'stock_id' => $stock->id,
                             'product_id' => $replacement->product_id,
+                            'variant_id' => $replacement->variant_id,
                             'quantity_increased' => $replacement->quantity
                         ]);
                     } else {
-                        // Create new stock entry for replacement product
                         Stock::create([
                             'warehouse_id' => $purchaseReturn->warehouse_id,
                             'product_id' => $replacement->product_id,
@@ -620,7 +649,7 @@ class PurchaseReturnController extends Controller
                             'quantity' => $replacement->quantity,
                             'unit' => 'piece',
                             'purchase_price' => $replacement->unit_price,
-                            'sale_price' => $replacement->unit_price * 1.2, // Default 20% markup
+                            'sale_price' => $replacement->unit_price * 1.2,
                             'batch_no' => 'REPL-' . $purchaseReturn->return_no,
                             'created_by' => $user->id,
                         ]);
@@ -628,9 +657,11 @@ class PurchaseReturnController extends Controller
 
                     $replacement->update(['status' => 'completed']);
                 }
+
+                // ✅ IMPORTANT: product_replacement এ কোনো Payment/Account update হবে না
             }
 
-            // Update return status
+            // ✅ Final: Update return status
             $purchaseReturn->update([
                 'status' => 'completed',
                 'completed_at' => now(),
@@ -640,7 +671,6 @@ class PurchaseReturnController extends Controller
             $purchaseReturn->items()->update(['status' => 'completed']);
 
             DB::commit();
-
             return redirect()->back()->with('success', 'Purchase return completed successfully.');
 
         } catch (\Exception $e) {

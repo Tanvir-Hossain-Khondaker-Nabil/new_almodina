@@ -8,7 +8,18 @@ export default function SaleShow({ sale }) {
 
   // ========= Bangla Helpers =========
   const toBanglaDigit = (value) => {
-    const map = { 0: "০", 1: "১", 2: "২", 3: "৩", 4: "৪", 5: "৫", 6: "৬", 7: "৭", 8: "৮", 9: "৯" };
+    const map = {
+      0: "০",
+      1: "১",
+      2: "২",
+      3: "৩",
+      4: "৪",
+      5: "৫",
+      6: "৬",
+      7: "৭",
+      8: "৮",
+      9: "৯",
+    };
     return String(value ?? "").replace(/\d/g, (d) => map[d]);
   };
 
@@ -45,13 +56,14 @@ export default function SaleShow({ sale }) {
 
   const totalQty = useMemo(
     () => items.reduce((sum, it) => sum + Number(it?.quantity || 0), 0),
-    [items]
+    [items],
   );
 
   // ========= Al Modina Theme =========
   const MB_DARK = "rgb(15, 45, 26)";
   const MB_LIGHT = "rgb(30, 77, 43)";
-  const MB_GRADIENT = "linear-gradient(rgb(15, 45, 26) 0%, rgb(30, 77, 43) 100%)";
+  const MB_GRADIENT =
+    "linear-gradient(rgb(15, 45, 26) 0%, rgb(30, 77, 43) 100%)";
 
   const BORDER = "border-[#0f2d1a]";
   const TEXT = "text-[#1e4d2b]";
@@ -63,8 +75,7 @@ export default function SaleShow({ sale }) {
     "এখানে বেবী ফুডস, মুদি মালামাল, কসমেটিকস সামগ্রী সুলভ মূল্যে ক্রয়-বিক্রয় করা হয়। বিশেষ অর্ডারে সকল ধরনের কেক পাওয়া যায় এবং অর্ডার নেয়া হয়।";
 
   const padAddressLine =
-    sale?.creator?.business?.address ||
-    "নেভী চেকপোস্ট, খালিশপুর, খুলনা";
+    sale?.creator?.business?.address || "নেভী চেকপোস্ট, খালিশপুর, খুলনা";
 
   const padMobile = sale?.creator?.business?.phone || "০১৬৭৪-০০৭৪৭২";
 
@@ -72,21 +83,73 @@ export default function SaleShow({ sale }) {
   const invoiceDate = formatDateBn(sale?.created_at);
 
   const customerName =
-    sale?.customer?.customer_name || sale?.customer?.name || "Walk-in Customer";
+    sale?.customer?.customer_name ||
+    sale?.customer?.name ||
+    "Walk-in Customer";
 
   const customerAddress =
     sale?.customer?.address || sale?.customer?.customer_address || "";
 
+  /**
+   * ✅ Discount column FIX:
+   * - Your table has 5 columns, but the Discount <td> had no borders/classes -> breaks design.
+   * - Also your widths/colSpan were wrong (empty row colSpan=4).
+   * - This safely shows per-item discount if present; otherwise shows sale-level discount info.
+   */
+  const discountLabel = useMemo(() => {
+    const d = Number(sale?.discount || 0);
+    const type = sale?.discount_type;
+    if (!d) return "";
+    if (type === "flat_discount") return `${formatMoneyBn(d)} ৳`;
+    return `${toBanglaDigit(d)}%`;
+  }, [sale]);
+
   const tableRows = useMemo(() => {
     return items.map((item) => {
       const desc =
-        item?.product?.name || item?.product_name || item?.description || "N/A";
+        item?.product?.name ||
+        item?.product_name ||
+        item?.description ||
+        "N/A";
+
       const qty = Number(item?.quantity || 0);
       const rate = Number(item?.unit_price || 0);
       const amount = Number(item?.total_price || 0);
-      return { desc, qty, rate, amount };
+
+      // Try item-level discount fields first (common names), else fallback to sale-level label
+      const itemDiscountValue =
+        item?.discount_amount ??
+        item?.discount ??
+        item?.line_discount ??
+        item?.discount_value ??
+        null;
+
+      const itemDiscountType =
+        item?.discount_type ??
+        item?.line_discount_type ??
+        item?.discount_mode ??
+        null;
+
+      let discountText = "";
+
+      if (itemDiscountValue !== null && itemDiscountValue !== undefined && itemDiscountValue !== "") {
+        const dv = Number(itemDiscountValue || 0);
+        if (itemDiscountType === "flat" || itemDiscountType === "flat_discount") {
+          discountText = `${formatMoneyBn(dv)} ৳`;
+        } else if (itemDiscountType === "percent" || itemDiscountType === "percentage") {
+          discountText = `${toBanglaDigit(dv)}%`;
+        } else {
+          // unknown type -> show raw number in Bangla
+          discountText = toBanglaDigit(dv);
+        }
+      } else {
+        // fallback: show sale-level discount label, or "-" if none
+        discountText = discountLabel ? discountLabel : "-";
+      }
+
+      return { desc, qty, rate, amount, discountText };
     });
-  }, [items]);
+  }, [items, discountLabel]);
 
   // ========= Print =========
   const handlePrint = () => {
@@ -107,7 +170,9 @@ export default function SaleShow({ sale }) {
       <div className={`pad-border border-2 ${BORDER} p-4`}>
         {/* Title gradient text */}
         <div
-          className={`text-center ${isPrint ? "text-[34px]" : "text-[34px] sm:text-[38px]"} font-extrabold leading-tight`}
+          className={`text-center ${
+            isPrint ? "text-[34px]" : "text-[34px] sm:text-[38px]"
+          } font-extrabold leading-tight`}
           style={{
             background: MB_GRADIENT,
             WebkitBackgroundClip: "text",
@@ -143,7 +208,9 @@ export default function SaleShow({ sale }) {
           <div className="grid grid-cols-[42px_1fr_38px_1fr] gap-2 items-end">
             <div>নং-</div>
             <div className="flex items-end gap-2">
-              <span className="text-xs font-semibold">{toBanglaDigit(memoNo)}</span>
+              <span className="text-xs font-semibold">
+                {toBanglaDigit(memoNo)}
+              </span>
               <span className={`flex-1 border-b-2 border-dotted ${BORDER} h-4`} />
             </div>
             <div>তারিখ</div>
@@ -175,16 +242,29 @@ export default function SaleShow({ sale }) {
           <table className="w-full table-fixed border-collapse">
             <thead>
               <tr>
-                <th className={`border-2 ${BORDER} font-extrabold text-sm py-2 w-[55%]`} style={{ color: MB_LIGHT }}>
+                {/* ✅ widths fixed to 100% total */}
+                <th
+                  className={`border-2 ${BORDER} font-extrabold text-sm py-2 w-[40%]`}
+                  style={{ color: MB_LIGHT }}
+                >
                   বিবরণ
                 </th>
-                <th className={`border-2 ${BORDER} font-extrabold text-sm py-2 w-[15%]`} style={{ color: MB_LIGHT }}>
+                <th
+                  className={`border-2 ${BORDER} font-extrabold text-sm py-2 w-[20%]`}
+                  style={{ color: MB_LIGHT }}
+                >
                   পরিমাণ
                 </th>
-                <th className={`border-2 ${BORDER} font-extrabold text-sm py-2 w-[15%]`} style={{ color: MB_LIGHT }}>
+                <th
+                  className={`border-2 ${BORDER} font-extrabold text-sm py-2 w-[20%]`}
+                  style={{ color: MB_LIGHT }}
+                >
                   দর
                 </th>
-                <th className={`border-2 ${BORDER} font-extrabold text-sm py-2 w-[15%]`} style={{ color: MB_LIGHT }}>
+                <th
+                  className={`border-2 ${BORDER} font-extrabold text-sm py-2 w-[20%]`}
+                  style={{ color: MB_LIGHT }}
+                >
                   টাকা
                 </th>
               </tr>
@@ -194,28 +274,44 @@ export default function SaleShow({ sale }) {
               {tableRows.length ? (
                 tableRows.map((r, idx) => (
                   <tr key={idx}>
-                    <td className={`border-l-2 border-r-2 ${BORDER} px-2 py-2 text-sm`}>{r.desc}</td>
-                    <td className={`border-l-2 border-r-2 ${BORDER} px-2 py-2 text-sm text-center`}>
+                    <td className={`border-2 ${BORDER} px-2 py-2 text-sm`}>
+                      {r.desc}
+                    </td>
+
+                    <td
+                      className={`border-2 ${BORDER} px-2 py-2 text-sm text-center`}
+                    >
                       {toBanglaDigit(r.qty)}
                     </td>
-                    <td className={`border-l-2 border-r-2 ${BORDER} px-2 py-2 text-sm text-center`}>
+
+                    <td
+                      className={`border-2 ${BORDER} px-2 py-2 text-sm text-center`}
+                    >
                       {formatMoneyBn(r.rate)}
                     </td>
-                    <td className={`border-l-2 border-r-2 ${BORDER} px-2 py-2 text-sm text-center`}>
+
+                    <td
+                      className={`border-2 ${BORDER} px-2 py-2 text-sm text-center`}
+                    >
                       {formatMoneyBn(r.amount)}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={4} className={`border-l-2 border-r-2 border-b-2 ${BORDER} px-3 py-8 text-center text-gray-500`}>
+                  {/* ✅ FIXED: colSpan should be 5 */}
+                  <td
+                    colSpan={5}
+                    className={`border-2 ${BORDER} px-3 py-8 text-center text-gray-500`}
+                  >
                     কোনো আইটেম পাওয়া যায়নি
                   </td>
                 </tr>
               )}
 
+              {/* ✅ Optional bottom spacer row with correct colSpan */}
               <tr>
-                <td colSpan={4} className={`border-b-2 ${BORDER}`} style={{ height: 1 }} />
+                <td colSpan={5} className={`border-0`} style={{ height: 6 }} />
               </tr>
             </tbody>
           </table>
@@ -224,6 +320,13 @@ export default function SaleShow({ sale }) {
             <span>
               মোট পরিমাণ: <b className={TEXT}>{toBanglaDigit(totalQty)}</b>
             </span>
+
+            {/* ✅ show sale-level discount neatly in totals (no UI break) */}
+            <span>
+              ডিসকাউন্ট:{" "}
+              <b className={TEXT}>{discountLabel ? discountLabel : toBanglaDigit(0)}</b>
+            </span>
+
             <span>
               মোট টাকা: <b className={TEXT}>{formatMoneyBn(sale?.grand_total)}</b>
             </span>
@@ -288,14 +391,21 @@ export default function SaleShow({ sale }) {
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Link href={route("sales.index")} className="btn btn-ghost btn-sm btn-circle">
+              <Link
+                href={route("sales.index")}
+                className="btn btn-ghost btn-sm btn-circle"
+              >
                 <ArrowLeft size={16} />
               </Link>
-              <h1 className="text-2xl font-bold text-gray-900">Sale Invoice (Pad)</h1>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Sale Invoice (Pad)
+              </h1>
             </div>
             <p className="text-gray-600">
               Invoice #:{" "}
-              <span className="font-mono font-semibold">{toBanglaDigit(memoNo)}</span>
+              <span className="font-mono font-semibold">
+                {toBanglaDigit(memoNo)}
+              </span>
             </p>
           </div>
 
@@ -308,7 +418,9 @@ export default function SaleShow({ sale }) {
             >
               <Printer size={16} />
               Print
-              {isPrinting && <span className="loading loading-spinner loading-xs ml-2"></span>}
+              {isPrinting && (
+                <span className="loading loading-spinner loading-xs ml-2"></span>
+              )}
             </button>
 
             <button
@@ -318,7 +430,9 @@ export default function SaleShow({ sale }) {
             >
               <Download size={16} />
               Download PDF
-              {isPrinting && <span className="loading loading-spinner loading-xs ml-2"></span>}
+              {isPrinting && (
+                <span className="loading loading-spinner loading-xs ml-2"></span>
+              )}
             </button>
           </div>
         </div>

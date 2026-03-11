@@ -254,7 +254,7 @@ class ProductController extends Controller
         $rules = [
             'product_name' => 'required|string|max:255',
             'category_id' => 'required|exists:categories,id',
-            'product_no' => 'nullable|string|max:100|unique:products,product_no,' . ($request->id ?? 'NULL'),
+            'product_no' => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'product_type' => 'required|in:regular,in_house',
             'variants' => 'nullable|array',
