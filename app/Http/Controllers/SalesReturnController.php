@@ -180,8 +180,8 @@ class SalesReturnController extends Controller
 
 
     /*
-    ** Create function (with unit conversion)
-    */
+     ** Create function (with unit conversion)
+     */
     public function create(Request $request)
     {
         $saleId = $request->query('sale_id');
@@ -279,7 +279,7 @@ class SalesReturnController extends Controller
         $recentSales = Sale::with(['customer'])
             ->whereHas('items', function ($query) {
                 $query->whereNotNull('product_id')
-                    ->where('type', 'inventory')
+                    ->where('type', 'pos')
                     ->whereNotNull('stock_id');
             })
             ->whereDate('created_at', '>=', now()->subDays(15))
@@ -303,8 +303,8 @@ class SalesReturnController extends Controller
 
 
     /*
-    ** Store function (with unit conversion)
-    */
+     ** Store function (with unit conversion)
+     */
     public function store(SalesReturnStore $request)
     {
 
@@ -489,8 +489,8 @@ class SalesReturnController extends Controller
 
 
     /*
-    ** approved function (with unit conversion)
-    */
+     ** approved function (with unit conversion)
+     */
     public function approve($id)
     {
         DB::beginTransaction();
@@ -510,24 +510,23 @@ class SalesReturnController extends Controller
 
             $this->processFinancials($salesReturn, $customer, $account);
 
-            if($salesReturn->return_type == 'money_back')
-            {
-                foreach ($salesReturn->items as $item) 
-                {
+            if ($salesReturn->return_type == 'money_back') {
+                foreach ($salesReturn->items as $item) {
                     $this->processReturnItem($item);
                     $item->update(['status' => 'processed']);
                 }
-            }
-            else{
-                foreach ($salesReturn->items as $item) 
-                {
+            } else {
+                foreach ($salesReturn->items as $item) {
                     $this->processReplacementItem($item);
                     $item->update(['status' => 'processed']);
-                } 
+                }
+
             }
 
 
             $salesReturn->update(['status' => 'completed']);
+
+
 
             $this->updateSaleStatus($salesReturn->sale_id);
 
@@ -542,10 +541,11 @@ class SalesReturnController extends Controller
     }
 
 
-        // ভেরিয়েন্ট ডিসপ্লে নাম
+    // ভেরিয়েন্ট ডিসপ্লে নাম
     private function getVariantDisplayName($variant)
     {
-        if (!$variant) return 'Default Variant';
+        if (!$variant)
+            return 'Default Variant';
 
         $parts = [];
 
@@ -594,7 +594,7 @@ class SalesReturnController extends Controller
 
 
 
-  
+
     // রিটার্ন আইটেম প্রসেস
     private function processReturnItem($item)
     {
@@ -602,7 +602,7 @@ class SalesReturnController extends Controller
         $product = $item->product;
         $unitType = $product->unit_type ?? 'piece';
 
-        
+
         // বেস ইউনিটে কনভার্ট
         $baseQuantity = $this->convertToBase(
             $item->return_quantity,
@@ -635,7 +635,7 @@ class SalesReturnController extends Controller
             ]);
         }
 
-      
+
 
         // স্টক মুভমেন্ট
         StockMovement::create([
@@ -659,9 +659,10 @@ class SalesReturnController extends Controller
     // রিপ্লেসমেন্ট আইটেম প্রসেস
     private function processReplacementItem($item)
     {
+
         $product = $item->product;
         $unitType = $product->unit_type ?? 'piece';
-        
+
         $baseQuantity = $this->convertToBase(
             $item->return_quantity,
             $item->unit,
@@ -673,15 +674,17 @@ class SalesReturnController extends Controller
             ->where('variant_id', $item->variant_id)
             ->first();
 
+
         if ($stock) {
             if ($stock->quantity < $item->return_quantity) {
-                throw new \Exception('Insufficient stock for replacement product: ' . $product->name);
+                return back()->withErrors(['error' => 'Insufficient stock for replacement product: ' . $product->name]);
             }
-            // $stock->decrement('quantity', $item->return_quantity);
-            // $stock->decrement('base_quantity', $baseQuantity);
+            $stock->decrement('quantity', $item->return_quantity);
+            $stock->decrement('base_quantity', $baseQuantity);
         } else {
-            throw new \Exception('Stock not found for replacement product: ' . $product->name);
+            return back()->withErrors(['error' => 'Stock not found for replacement product: ' . $product->name]);
         }
+
 
         // স্টক মুভমেন্ট
         StockMovement::create([
@@ -697,40 +700,38 @@ class SalesReturnController extends Controller
             'notes' => 'Stock used for replacement in sales return #' . $item->salesReturn->return_no,
             'created_by' => Auth::id()
         ]);
+
+
     }
 
 
-  // ফাইনান্সিয়াল প্রসেস
+    // ফাইনান্সিয়াল প্রসেস
     private function processFinancials($salesReturn, $customer, $account)
     {
         // মানি ব্যাক রিটার্ন
         if ($salesReturn->return_type === 'money_back') {
-            // রিফান্ড প্রসেস
             if ($salesReturn->refunded_amount > 0) {
 
+                Expense::create([
+                    'account_id' => $account->id,
+                    'amount' => $salesReturn->refunded_amount,
+                    'sh_amount' => $salesReturn->shadow_refunded_amount,
+                    'created_by' => Auth::id(),
+                    'date' => Carbon::now(),
+                    'category_id' => null,
+                    'details' => 'Refund for sales return #' . $salesReturn->return_no
+                ]);
 
-                if ($customer->due_amount > 0) {
-                    $deduction = min($salesReturn->refunded_amount, $customer->due_amount);
-                    $customer->decrement('due_amount', $deduction);
-                    
-                    // বাকি থাকলে অ্যাডভান্সে যোগ
-                    $remaining = $salesReturn->refunded_amount - $deduction;
-                    if ($remaining > 0) {
-                        $customer->increment('advance_amount', $remaining);
-                    }
-                } else {
-                    // সরাসরি অ্যাডভান্সে যোগ
-                    $customer->increment('advance_amount', $salesReturn->refunded_amount);
-                }
-                
+                $account->updateBalance($salesReturn->refunded_amount, 'withdraw');
+
                 $customer->save();
-                
+
                 Payment::create([
                     'sale_id' => $salesReturn->sale_id,
                     'customer_id' => $customer->id,
                     'account_id' => $account->id,
-                    'amount' => -$salesReturn->refunded_amount ,
-                    'shadow_amount' => $salesReturn->shadow_refunded_amount,
+                    'amount' => ($salesReturn->refunded_amount * -1),
+                    'shadow_amount' => ($salesReturn->shadow_refunded_amount * -1) ?? ($salesReturn->refunded_amount * -1),
                     'payment_method' => 'refunded',
                     'txn_ref' => 'RFND-' . Str::random(10),
                     'note' => 'Refund for sales return #' . $salesReturn->return_no,
@@ -740,36 +741,37 @@ class SalesReturnController extends Controller
                 ]);
             }
         }
-        
+
         // প্রোডাক্ট রিপ্লেসমেন্ট
         if ($salesReturn->return_type === 'product_replacement') {
             $netDifference = $salesReturn->replacement_total - $salesReturn->total_return_value;
+            $netDifferenceShadow = $salesReturn->shadow_replacement_total - $salesReturn->shadow_total_return_value;
 
-            
+
             if ($netDifference > 0) {
 
                 $customer->increment('due_amount', $netDifference);
                 $customer->save();
-                
+
                 Payment::create([
                     'sale_id' => $salesReturn->sale_id,
                     'customer_id' => $customer->id,
-                    'amount' => -$netDifference, 
-                    'shadow_amount' => -($salesReturn->shadow_replacement_total - $salesReturn->shadow_total_return_value),
+                    'amount' => -$netDifference,
+                    'shadow_amount' => $netDifferenceShadow ? ($netDifferenceShadow * -1) : $netDifference * -1,
                     'payment_method' => 'adjustment',
                     'txn_ref' => 'ADJ-' . Str::random(10),
                     'note' => 'Adjustment for replacement return #' . $salesReturn->return_no,
-                    'paid_at' => Carbon::now(), 
+                    'paid_at' => Carbon::now(),
                     'created_by' => Auth::id(),
                     'status' => 'pending'
                 ]);
             } elseif ($netDifference < 0) {
                 $refundAmount = abs($netDifference);
-                
+
                 if ($customer->due_amount > 0) {
                     $deduction = min($refundAmount, $customer->due_amount);
                     $customer->decrement('due_amount', $deduction);
-                    
+
                     $remaining = $refundAmount - $deduction;
                     if ($remaining > 0) {
                         $customer->increment('advance_amount', $remaining);
@@ -777,9 +779,9 @@ class SalesReturnController extends Controller
                 } else {
                     $customer->increment('advance_amount', $refundAmount);
                 }
-                
+
                 $customer->save();
-                
+
                 Payment::create([
                     'sale_id' => $salesReturn->sale_id,
                     'customer_id' => $customer->id,
@@ -792,22 +794,25 @@ class SalesReturnController extends Controller
                     'created_by' => Auth::id(),
                 ]);
             }
+
         }
     }
 
 
 
-   // সেল স্ট্যাটাস আপডেট
+    // সেল স্ট্যাটাস আপডেট
     private function updateSaleStatus($saleId)
     {
         $sale = Sale::with('items')->find($saleId);
-        if (!$sale) return;
+        if (!$sale)
+            return;
 
         $totalSold = $sale->items->sum('quantity');
         $totalReturned = SalesReturnItem::whereIn('sale_item_id', $sale->items->pluck('id'))
             ->where('status', 'processed')
             // ->where('is_replacement', false)
             ->sum('return_quantity');
+
 
         if ($totalReturned >= $totalSold) {
             $sale->status = 'fully_returned';
